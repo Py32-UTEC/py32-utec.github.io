@@ -1,0 +1,2388 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Py32 Gantt</title>
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      /* Colors - Light Mode */
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --text-primary: #0f172a;
+      --text-secondary: #64748b;
+      --text-muted: #94a3b8;
+      --border-color: rgba(0, 0, 0, 0.08);
+      --border-hover: rgba(0, 0, 0, 0.15);
+      --accent: #6d28d9;
+      --accent-glow: rgba(109, 40, 217, 0.15);
+      --accent-hover: #5b21b6;
+      
+      --task-summary-bg: rgba(2, 132, 199, 0.15);
+      --task-summary-border: #0284c7;
+      --task-normal-bg: rgba(109, 40, 217, 0.15);
+      --task-normal-border: #6d28d9;
+      --task-normal-progress: #6d28d9;
+      --task-milestone-color: #d97706;
+      
+      --weekend-bg: rgba(0, 0, 0, 0.02);
+      --grid-line-color: rgba(0, 0, 0, 0.05);
+      --today-line-color: #e11d48;
+      --arrow-color: rgba(100, 116, 139, 0.7);
+      --arrow-color-active: #6d28d9;
+      
+      --hover-row-bg: rgba(0, 0, 0, 0.02);
+      --glass-bg: rgba(255, 255, 255, 0.8);
+      --glass-blur: blur(12px);
+      --shadow-lg: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+      
+      /* Layout & Sizes */
+      --header-height: 64px;
+      --row-height: 48px;
+      --sidebar-width: 460px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* SCROLLBAR STYLING */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+
+    /* TOP BAR / HEADER */
+    header {
+      background-color: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 72px;
+      z-index: 100;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      background: linear-gradient(135deg, var(--text-primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-logo p {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      border-left: 1px solid var(--border-color);
+      padding-left: 12px;
+      margin-left: 4px;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* ACTIONS & BUTTONS */
+    .btn {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn:hover {
+      background: var(--border-color);
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: transparent;
+      color: #ffffff;
+      box-shadow: 0 4px 12px var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      border-color: transparent;
+    }
+
+    /* SEGMENTED CONTROL */
+    .segmented-control {
+      display: flex;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 3px;
+      border-radius: 8px;
+    }
+
+    .segment-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .segment-btn.active {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    /* HIDDEN FILE INPUT */
+    #file-input {
+      display: none;
+    }
+
+    /* MAIN CONTAINER */
+    .app-layout {
+      display: flex;
+      flex-direction: column;
+      flex-grow: 1;
+      height: calc(100vh - 72px);
+      position: relative;
+    }
+
+    /* FILTER BAR */
+    .filter-bar {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      z-index: 90;
+      flex-shrink: 0;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-grow: 1;
+      max-width: 900px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      flex-grow: 1;
+      max-width: 320px;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 8px 12px 8px 36px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .select-dropdown {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      min-width: 160px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .select-dropdown:focus {
+      border-color: var(--accent);
+    }
+
+    .filter-stats {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .gantt-workspace {
+      display: block;
+      flex-grow: 1;
+      overflow: auto; /* Vertically and Horizontally scrollable */
+      position: relative;
+    }
+
+    .gantt-grid {
+      display: inline-flex;
+      position: relative;
+      min-width: 100%;
+      min-height: 100%;
+    }
+
+    /* TABLE SIDEBAR (Sticky Left) */
+    .gantt-table {
+      position: sticky;
+      left: 0;
+      z-index: 10;
+      background: var(--bg-secondary);
+      border-right: 2px solid var(--border-color);
+      flex-shrink: 0;
+      width: var(--sidebar-width);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 5px 0 15px rgba(0, 0, 0, 0.05);
+    }
+
+    /* HEADERS */
+    .table-header, .timeline-header-container {
+      height: var(--header-height);
+      border-bottom: 2px solid var(--border-color);
+      background-color: var(--bg-tertiary);
+      display: flex;
+      align-items: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .table-header {
+      padding: 0 16px;
+      z-index: 30; /* Higher than timeline header to cover it when scrolling horizontally */
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .table-header-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ROWS LAYOUT */
+    .gantt-row {
+      height: var(--row-height);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      transition: background-color 0.15s ease;
+    }
+
+    .gantt-row.hovered {
+      background-color: var(--hover-row-bg) !important;
+    }
+
+    /* TABLE ROW */
+    .table-row {
+      padding: 0 16px;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 36px 1fr 140px;
+      gap: 12px;
+    }
+
+    .table-row:nth-child(even) {
+      background-color: rgba(255, 255, 255, 0.01);
+    }
+
+    .task-id {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .task-name-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .task-toggle {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .task-toggle:hover {
+      background: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .task-toggle svg {
+      transition: transform 0.2s ease;
+    }
+
+    .task-toggle.collapsed svg {
+      transform: rotate(-90deg);
+    }
+
+    .task-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+
+    .task-name.level-1 {
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .task-name.level-2 {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .task-resources {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      justify-content: flex-end;
+    }
+
+    /* RESOURCE AVATARS */
+    .avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #ffffff;
+      border: 1.5px solid var(--bg-secondary);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      cursor: help;
+      transition: transform 0.15s ease;
+    }
+
+    .avatar:hover {
+      transform: scale(1.15);
+      z-index: 5;
+    }
+
+    /* TIMELINE AREA */
+    .gantt-timeline {
+      flex-grow: 1;
+      position: relative;
+    }
+
+    /* TIMELINE SCROLL GRID CONTAINER */
+    .gantt-svg-container {
+      position: relative;
+      display: inline-block;
+    }
+
+    .gantt-svg {
+      display: block;
+      background-color: var(--bg-primary);
+    }
+
+    /* INTERACTIVE SVG TOOLTIP */
+    .gantt-tooltip {
+      position: fixed;
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      box-shadow: var(--shadow-lg);
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0;
+      transform: scale(0.95);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      max-width: 320px;
+    }
+
+    .gantt-tooltip.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .tooltip-header {
+      font-weight: 600;
+      margin-bottom: 6px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 4px;
+      font-size: 0.85rem;
+    }
+
+    .tooltip-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 4px;
+    }
+
+    .tooltip-label {
+      color: var(--text-secondary);
+    }
+
+    .tooltip-value {
+      font-weight: 500;
+      text-align: right;
+    }
+
+    .tooltip-notes {
+      font-style: italic;
+      color: var(--text-muted);
+      border-top: 1px dashed var(--border-color);
+      padding-top: 6px;
+      margin-top: 6px;
+      font-size: 0.75rem;
+      line-height: 1.3;
+    }
+
+    /* WELCOME/DROP ZONE CONTAINER */
+    .welcome-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(11, 15, 25, 0.95);
+      backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 500;
+      padding: 24px;
+      text-align: center;
+      transition: opacity 0.3s ease;
+    }
+
+    .welcome-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .drop-zone {
+      width: 100%;
+      max-width: 520px;
+      border: 2px dashed var(--border-color);
+      border-radius: 16px;
+      padding: 48px 32px;
+      background: var(--bg-secondary);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(139, 92, 246, 0.03);
+      box-shadow: 0 0 30px var(--accent-glow);
+    }
+
+    .drop-zone-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 24px;
+      box-shadow: var(--shadow-lg);
+      transition: transform 0.3s ease;
+    }
+
+    .drop-zone:hover .drop-zone-icon {
+      transform: scale(1.1);
+    }
+
+    .drop-zone h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .drop-zone p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin: 20px 0;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .divider::before, .divider::after {
+      content: "";
+      flex-grow: 1;
+      background: var(--border-color);
+      height: 1px;
+      margin: 0 16px;
+    }
+
+    /* BACKDROP DECORATION GLOBES */
+    .glow-bg {
+      position: absolute;
+      top: -20%;
+      left: -10%;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, rgba(139, 92, 246, 0) 70%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .glow-bg-2 {
+      position: absolute;
+      bottom: -10%;
+      right: -10%;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(14, 165, 233, 0.06) 0%, rgba(14, 165, 233, 0) 70%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* PREDECESSOR HOVER GLOW EFFECT */
+    .dep-link {
+      transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease;
+      opacity: 0.8;
+      stroke-width: 1.5px;
+    }
+    
+    .dep-link.active-highlight {
+      stroke: var(--arrow-color-active) !important;
+      stroke-width: 2.5px !important;
+      opacity: 1 !important;
+      filter: drop-shadow(0 0 4px var(--accent-glow));
+    }
+    
+    .dep-link.faded {
+      opacity: 0.08 !important;
+    }
+
+    .task-bar-g {
+      transition: opacity 0.2s ease;
+    }
+    
+    .task-bar-g:hover .task-bar-rect {
+      filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.4));
+      stroke-width: 1.5px;
+    }
+    
+    .task-bar-g.active-highlight .task-bar-rect {
+      stroke: var(--arrow-color-active) !important;
+      stroke-width: 2px !important;
+      filter: drop-shadow(0 0 8px var(--accent-glow));
+    }
+    
+    .task-bar-g.faded {
+      opacity: 0.2;
+    }
+
+    /* EMPTY STATE */
+    .empty-state {
+      padding: 40px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 100px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Decorative Glowing Lights -->
+  <div class="glow-bg"></div>
+  <div class="glow-bg-2"></div>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-logo">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="activity" class="lucide lucide-activity lucide-custom" aria-hidden="true" style="color: var(--accent); width: 28px; height: 28px;"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"></path></svg>
+      <div>
+        <h1>Py32 Gantt</h1>
+        <p>Visualizador Interactivo de Proyectos</p>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="segmented-control">
+        <button class="segment-btn" id="zoom-day" onclick="changeZoom('day')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="calendar-days" class="lucide lucide-calendar-days lucide-custom" aria-hidden="true" style="width: 14px; height: 14px;"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>Día
+        </button>
+        <button class="segment-btn" id="zoom-week" onclick="changeZoom('week')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="calendar-range" class="lucide lucide-calendar-range lucide-custom" aria-hidden="true" style="width: 14px; height: 14px;"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4"></path><path d="M3 10h18"></path><path d="M8 2v4"></path><path d="M17 14h-6"></path><path d="M13 18H7"></path><path d="M7 14h.01"></path><path d="M17 18h.01"></path></svg>Semana
+        </button>
+        <button class="segment-btn" id="zoom-month" onclick="changeZoom('month')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="calendar" class="lucide lucide-calendar lucide-custom" aria-hidden="true" style="width: 14px; height: 14px;"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg>Mes
+        </button>
+        <button class="segment-btn active" id="zoom-fit" onclick="changeZoom('fit')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="maximize" class="lucide lucide-maximize lucide-custom" aria-hidden="true" style="width: 14px; height: 14px;"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>Ajustar
+        </button>
+      </div>
+
+
+      <button class="btn btn-primary" onclick="triggerFileInput()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="upload" class="lucide lucide-upload lucide-custom" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M12 3v12"></path><path d="m17 8-5-5-5 5"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg>Cargar CSV
+      </button>
+      <input type="file" id="file-input" accept=".csv" onchange="handleFileSelect(event)">
+
+      <button class="btn" onclick="exportToSVG()" id="btn-export">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="download" class="lucide lucide-download lucide-custom" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M12 15V3"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path></svg>Exportar SVG
+      </button>
+
+      <button class="btn" onclick="exportToHTML()" id="btn-export-html">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="file-code" class="lucide lucide-file-code lucide-custom" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12.5 8 15l2 2.5"></path><path d="m14 12.5 2 2.5-2 2.5"></path></svg>Exportar HTML
+      </button>
+    </div>
+  </header>
+
+  <!-- FILTER & SEARCH BAR -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <div class="input-wrapper">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="search" class="lucide lucide-search input-icon lucide-custom" aria-hidden="true" style="width: 16px; height: 16px;"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></svg>
+        <input type="text" id="search-input" class="search-input" placeholder="Buscar por ID, nombre o notas..." oninput="handleSearch(event)">
+      </div>
+
+      <select id="resource-filter" class="select-dropdown" onchange="handleResourceFilter(event)"><option value="">Todos los recursos</option><option value="Eduardo Gimeno">Eduardo Gimeno</option><option value="Leandro Cabrera">Leandro Cabrera</option><option value="Mateo Rodríguez">Mateo Rodríguez</option></select>
+
+      <select id="status-filter" class="select-dropdown" onchange="handleStatusFilter(event)">
+        <option value="">Todos los estados</option>
+        <option value="completed">Completados (100%)</option>
+        <option value="in_progress">En progreso (&gt;0% e &lt;100%)</option>
+        <option value="not_started">Sin iniciar (0%)</option>
+      </select>
+    </div>
+
+    <div class="filter-stats" id="filter-stats">
+        <span>Progreso Promedio: <strong>8%</strong></span>
+      </div>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div class="app-layout">
+    <!-- Welcome Drop Zone Overlay -->
+    <div class="welcome-overlay hidden" id="welcome-overlay">
+      <div class="drop-zone" id="drop-zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="triggerFileInput()">
+        <div class="drop-zone-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="file-spreadsheet" class="lucide lucide-file-spreadsheet lucide-custom" aria-hidden="true" style="width: 32px; height: 32px;"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M8 13h2"></path><path d="M14 13h2"></path><path d="M8 17h2"></path><path d="M14 17h2"></path></svg>
+        </div>
+        <h3>Arrastra tu archivo Gantt CSV aquí</h3>
+        <p>Soporta formato estructurado con Outline Level, ID, Name, Start, Finish, Duration, % Complete, Predecessors, Resource Names.</p>
+        <span class="btn">Examinar archivos locales</span>
+      </div>
+      <div class="divider">o si prefieres probar rápido</div>
+      <button class="btn btn-primary" onclick="loadSampleData()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="play" class="lucide lucide-play lucide-custom" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"></path></svg>Cargar Proyecto Demo (Online_Gantt_final_v2.csv)
+      </button>
+    </div>
+
+    <!-- Gantt Workspace -->
+    <div class="gantt-workspace" id="gantt-workspace">
+      <div class="gantt-grid" id="gantt-grid" style="display: flex;">
+        
+        <!-- Table Column (Sticky Left) -->
+        <div class="gantt-table" id="gantt-table">
+          <div class="table-header">
+            <div class="table-header-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="list-todo" class="lucide lucide-list-todo lucide-custom" aria-hidden="true" style="width: 14px; height: 14px; color: var(--accent);"><path d="M13 5h8"></path><path d="M13 12h8"></path><path d="M13 19h8"></path><path d="m3 17 2 2 4-4"></path><rect x="3" y="4" width="6" height="6" rx="1"></rect></svg>
+              Detalle de Tareas
+            </div>
+            <span style="font-size: 0.65rem; color: var(--text-muted);" id="task-visible-count">61 de 61 tareas</span>
+          </div>
+          <div id="table-rows-container"><div class="gantt-row table-row row-task-1" data-id="1"><div class="task-id">1</div><div class="task-name-wrapper" style="padding-left: 0px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-1" title="Proyecto final - Sistema IoT de detección y monitoreo">Proyecto final - Sistema IoT de detección y monitoreo</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-2" data-id="2"><div class="task-id">2</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Inicio, planificación y definición técnica">Inicio, planificación y definición técnica</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-3" data-id="3"><div class="task-id">3</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Planificación inicial del proyecto y organización del backlog">Planificación inicial del proyecto y organización del backlog</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-4" data-id="4"><div class="task-id">4</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Revisión y ajuste de requerimientos, alcance del MVP y priorización">Revisión y ajuste de requerimientos, alcance del MVP y priorización</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-5" data-id="5"><div class="task-id">5</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Definición de arquitectura, almacenamiento y lineamientos técnicos">Definición de arquitectura, almacenamiento y lineamientos técnicos</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-6" data-id="6"><div class="task-id">6</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Definición del modelo de datos y protocolo de telemetría">Definición del modelo de datos y protocolo de telemetría</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-7" data-id="7"><div class="task-id">7</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.01 - Planificación del proyecto aprobada">HITO H.01 - Planificación del proyecto aprobada</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-8" data-id="8"><div class="task-id">8</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Despliegue principal de nodos">Despliegue principal de nodos</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-9" data-id="9"><div class="task-id">9</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Compra de componentes para despliegue principal de nodos">Compra de componentes para despliegue principal de nodos</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-10" data-id="10"><div class="task-id">10</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Armado y ensamblaje de nodos para despliegue principal">Armado y ensamblaje de nodos para despliegue principal</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-11" data-id="11"><div class="task-id">11</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación del mecanismo OTA">Implementación del mecanismo OTA</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-12" data-id="12"><div class="task-id">12</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Validación de gestión remota y operación de dispositivos">Validación de gestión remota y operación de dispositivos</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-13" data-id="13"><div class="task-id">13</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Instalación y validación del despliegue principal en áreas controladas">Instalación y validación del despliegue principal en áreas controladas</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-14" data-id="14"><div class="task-id">14</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.02 - Prototipo funcional validado">HITO H.02 - Prototipo funcional validado</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-15" data-id="15"><div class="task-id">15</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Monitoreo acústico y transmisión de eventos">Monitoreo acústico y transmisión de eventos</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-16" data-id="16"><div class="task-id">16</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de captura de señales acústicas y vibracionales en el nodo">Implementación de captura de señales acústicas y vibracionales en el nodo</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-17" data-id="17"><div class="task-id">17</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación del procesamiento local de señales y extracción de métricas">Implementación del procesamiento local de señales y extracción de métricas</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div></div></div><div class="gantt-row table-row row-task-18" data-id="18"><div class="task-id">18</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de transmisión de eventos y telemetría desde el nodo">Implementación de transmisión de eventos y telemetría desde el nodo</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-19" data-id="19"><div class="task-id">19</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Validación del flujo completo captura, procesamiento y transmisión">Validación del flujo completo captura, procesamiento y transmisión</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-20" data-id="20"><div class="task-id">20</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Backend, persistencia y almacenamiento">Backend, persistencia y almacenamiento</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-21" data-id="21"><div class="task-id">21</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de base de datos y estructuras de persistencia">Implementación de base de datos y estructuras de persistencia</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div></div></div><div class="gantt-row table-row row-task-22" data-id="22"><div class="task-id">22</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de ingesta de eventos y telemetría en backend">Implementación de ingesta de eventos y telemetría en backend</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-23" data-id="23"><div class="task-id">23</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación del almacenamiento de muestras, métricas y evidencia">Implementación del almacenamiento de muestras, métricas y evidencia</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div></div></div><div class="gantt-row table-row row-task-24" data-id="24"><div class="task-id">24</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Validación del almacenamiento histórico y consistencia de datos">Validación del almacenamiento histórico y consistencia de datos</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div></div></div><div class="gantt-row table-row row-task-25" data-id="25"><div class="task-id">25</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.03 - Flujo nodo - backend operativo">HITO H.03 - Flujo nodo - backend operativo</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-26" data-id="26"><div class="task-id">26</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Gestión de dispositivos IoT">Gestión de dispositivos IoT</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-27" data-id="27"><div class="task-id">27</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación del registro e identificación de nodos en la plataforma">Implementación del registro e identificación de nodos en la plataforma</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-28" data-id="28"><div class="task-id">28</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación del monitoreo de estado y salud de nodos">Implementación del monitoreo de estado y salud de nodos</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-29" data-id="29"><div class="task-id">29</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de configuración remota de parámetros">Implementación de configuración remota de parámetros</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-30" data-id="30"><div class="task-id">30</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Gestión de árboles y observaciones">Gestión de árboles y observaciones</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-31" data-id="31"><div class="task-id">31</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación del registro y gestión de árboles monitoreados">Implementación del registro y gestión de árboles monitoreados</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-32" data-id="32"><div class="task-id">32</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de la asociación nodo-árbol">Implementación de la asociación nodo-árbol</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-33" data-id="33"><div class="task-id">33</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de estado, ubicación e historial de árboles">Implementación de estado, ubicación e historial de árboles</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-34" data-id="34"><div class="task-id">34</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Registro de observaciones externas e intervenciones">Registro de observaciones externas e intervenciones</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div></div></div><div class="gantt-row table-row row-task-35" data-id="35"><div class="task-id">35</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación del etiquetado manual de eventos">Implementación del etiquetado manual de eventos</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-36" data-id="36"><div class="task-id">36</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Validación del flujo de observaciones y etiquetado">Validación del flujo de observaciones y etiquetado</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-37" data-id="37"><div class="task-id">37</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.04 - Gestión básica de nodos y árboles implementada">HITO H.04 - Gestión básica de nodos y árboles implementada</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-38" data-id="38"><div class="task-id">38</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Plataforma web y visualización">Plataforma web y visualización</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-39" data-id="39"><div class="task-id">39</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Inicialización de la plataforma web y estructura base del frontend">Inicialización de la plataforma web y estructura base del frontend</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-40" data-id="40"><div class="task-id">40</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de dashboard de monitoreo y visualización general">Implementación de dashboard de monitoreo y visualización general</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-41" data-id="41"><div class="task-id">41</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de consulta y filtrado histórico">Implementación de consulta y filtrado histórico</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-42" data-id="42"><div class="task-id">42</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de vistas de detalle de árboles, nodos y eventos">Implementación de vistas de detalle de árboles, nodos y eventos</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-43" data-id="43"><div class="task-id">43</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Integración frontend-backend y validación de visualización">Integración frontend-backend y validación de visualización</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-44" data-id="44"><div class="task-id">44</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Alertas, exportación e integración externa">Alertas, exportación e integración externa</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-45" data-id="45"><div class="task-id">45</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de reglas de alertas y eventos relevantes">Implementación de reglas de alertas y eventos relevantes</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-46" data-id="46"><div class="task-id">46</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de visualización y gestión de alertas en plataforma">Implementación de visualización y gestión de alertas en plataforma</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-47" data-id="47"><div class="task-id">47</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.05 - MVP con dashboard, histórico y alertas disponible">HITO H.05 - MVP con dashboard, histórico y alertas disponible</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-48" data-id="48"><div class="task-id">48</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de exportación de datos y datasets históricos">Implementación de exportación de datos y datasets históricos</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-49" data-id="49"><div class="task-id">49</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de endpoints y mecanismos de interoperabilidad con sistemas externos">Implementación de endpoints y mecanismos de interoperabilidad con sistemas externos</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-50" data-id="50"><div class="task-id">50</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Documentación de APIs para intercambio bidireccional de datos">Documentación de APIs para intercambio bidireccional de datos</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-51" data-id="51"><div class="task-id">51</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Validación de exportación e integración externa a nivel de interfaz">Validación de exportación e integración externa a nivel de interfaz</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-52" data-id="52"><div class="task-id">52</div><div class="task-name-wrapper" style="padding-left: 16px;"><span class="task-toggle "><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="chevron-down" aria-hidden="true" class="lucide lucide-chevron-down lucide-custom" style="width: 14px; height: 14px;"><path d="m6 9 6 6 6-6"></path></svg></span><span class="task-name level-2" title="Infraestructura, pruebas y cierre">Infraestructura, pruebas y cierre</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div></div></div><div class="gantt-row table-row row-task-53" data-id="53"><div class="task-id">53</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Preparación de infraestructura, contenedores y servicios de despliegue">Preparación de infraestructura, contenedores y servicios de despliegue</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-54" data-id="54"><div class="task-id">54</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Implementación de autenticación y configuración operativa básica">Implementación de autenticación y configuración operativa básica</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-55" data-id="55"><div class="task-id">55</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Despliegue de la solución en entorno servidor/cloud">Despliegue de la solución en entorno servidor/cloud</span></div><div class="task-resources"><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-56" data-id="56"><div class="task-id">56</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.06 - Integraciones, exportación y despliegue completados">HITO H.06 - Integraciones, exportación y despliegue completados</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-57" data-id="57"><div class="task-id">57</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Pruebas integrales del sistema y corrección de incidencias">Pruebas integrales del sistema y corrección de incidencias</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-58" data-id="58"><div class="task-id">58</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Consolidación de documentación técnica y resultados del proyecto">Consolidación de documentación técnica y resultados del proyecto</span></div><div class="task-resources"><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div></div></div><div class="gantt-row table-row row-task-59" data-id="59"><div class="task-id">59</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.07 - Pruebas finales y documentación consolidadas">HITO H.07 - Pruebas finales y documentación consolidadas</span></div><div class="task-resources"></div></div><div class="gantt-row table-row row-task-60" data-id="60"><div class="task-id">60</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="Preparación de entrega final, demo y cierre del proyecto">Preparación de entrega final, demo y cierre del proyecto</span></div><div class="task-resources"><div class="avatar" title="Mateo Rodríguez" style="background-color: rgb(139, 92, 246);">MR</div><div class="avatar" title="Eduardo Gimeno" style="background-color: rgb(59, 130, 246);">EG</div><div class="avatar" title="Leandro Cabrera" style="background-color: rgb(16, 185, 129);">LC</div></div></div><div class="gantt-row table-row row-task-61" data-id="61"><div class="task-id">61</div><div class="task-name-wrapper" style="padding-left: 32px;"><span style="width: 20px;"></span><span class="task-name level-3" title="HITO H.08 - Entrega final del proyecto">HITO H.08 - Entrega final del proyecto</span></div><div class="task-resources"></div></div></div>
+        </div>
+
+        <!-- SVG Timeline Column -->
+        <div class="gantt-timeline" id="gantt-timeline">
+          <!-- Timeline Sticky Header -->
+          <div class="timeline-header-container" style="position: sticky; top: 0; z-index: 20; background: var(--bg-tertiary); overflow: hidden; border-bottom: 2px solid var(--border-color); display: block;">
+            <svg id="gantt-header-svg" class="gantt-svg" style="height: 64px; display: block;" width="1412" height="64">
+              <g id="svg-grid-headers"><line x1="0" y1="64" x2="1412" y2="64" stroke="var(--border-color)" stroke-width="1.5"></line><line x1="0" y1="32" x2="0" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="27.303867403314918" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">25</text><text x="6" y="20" fill="var(--text-primary)" font-size="11px" font-weight="600">Mayo 2026</text><line x1="0" y1="0" x2="0" y2="32" stroke="var(--border-color)" stroke-width="1"></line><line x1="55" y1="32" x2="55" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="82.30386740331491" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">1</text><text x="61" y="20" fill="var(--text-primary)" font-size="11px" font-weight="600">Junio 2026</text><line x1="55" y1="0" x2="55" y2="32" stroke="var(--border-color)" stroke-width="1"></line><line x1="109" y1="32" x2="109" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="136.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">8</text><line x1="164" y1="32" x2="164" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="191.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">15</text><line x1="218" y1="32" x2="218" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="245.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">22</text><line x1="273" y1="32" x2="273" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="300.30386740331494" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">29</text><text x="295" y="20" fill="var(--text-primary)" font-size="11px" font-weight="600">Julio 2026</text><line x1="289" y1="0" x2="289" y2="32" stroke="var(--border-color)" stroke-width="1"></line><line x1="328" y1="32" x2="328" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="355.30386740331494" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">6</text><line x1="382" y1="32" x2="382" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="409.30386740331494" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">13</text><line x1="437" y1="32" x2="437" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="464.30386740331494" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">20</text><line x1="491" y1="32" x2="491" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="518.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">27</text><text x="536" y="20" fill="var(--text-primary)" font-size="11px" font-weight="600">Agosto 2026</text><line x1="530" y1="0" x2="530" y2="32" stroke="var(--border-color)" stroke-width="1"></line><line x1="546" y1="32" x2="546" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="573.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">3</text><line x1="601" y1="32" x2="601" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="628.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">10</text><line x1="655" y1="32" x2="655" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="682.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">17</text><line x1="710" y1="32" x2="710" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="737.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">24</text><line x1="765" y1="32" x2="765" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="792.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">31</text><text x="778" y="20" fill="var(--text-primary)" font-size="11px" font-weight="600">Septiembre 2026</text><line x1="772" y1="0" x2="772" y2="32" stroke="var(--border-color)" stroke-width="1"></line><line x1="819" y1="32" x2="819" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="846.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">7</text><line x1="874" y1="32" x2="874" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="901.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">14</text><line x1="928" y1="32" x2="928" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="955.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">21</text><line x1="983" y1="32" x2="983" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1010.3038674033149" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">28</text><text x="1012" y="20" fill="var(--text-primary)" font-size="11px" font-weight="600">Octubre 2026</text><line x1="1006" y1="0" x2="1006" y2="32" stroke="var(--border-color)" stroke-width="1"></line><line x1="1038" y1="32" x2="1038" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1065.3038674033148" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">5</text><line x1="1092" y1="32" x2="1092" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1119.3038674033148" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">12</text><line x1="1147" y1="32" x2="1147" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1174.3038674033148" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">19</text><line x1="1201" y1="32" x2="1201" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1228.3038674033148" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">26</text><text x="1254" y="20" fill="var(--text-primary)" font-size="11px" font-weight="600">Noviembre 2026</text><line x1="1248" y1="0" x2="1248" y2="32" stroke="var(--border-color)" stroke-width="1"></line><line x1="1256" y1="32" x2="1256" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1283.3038674033148" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">2</text><line x1="1311" y1="32" x2="1311" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1338.3038674033148" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">9</text><line x1="1365" y1="32" x2="1365" y2="64" stroke="var(--border-color)" stroke-width="0.5"></line><text x="1392.3038674033148" y="50" text-anchor="middle" fill="var(--text-secondary)" font-size="9px" font-weight="500">16</text><rect x="292" y="38" width="40" height="16" rx="4" fill="var(--today-line-color)"></rect><text x="312" y="49" text-anchor="middle" fill="#ffffff" font-size="8px" font-weight="700">HOY</text><line x1="312" y1="32" x2="312" y2="64" stroke="var(--today-line-color)" stroke-width="1.5" stroke-dasharray="3 3"></line></g>
+            </svg>
+          </div>
+          <!-- Timeline Scroll Body -->
+          <div class="gantt-svg-container" style="display: block;">
+            <svg id="gantt-svg" class="gantt-svg" width="1412" height="2928">
+              <defs>
+                <!-- Glow arrow marker -->
+                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="context-stroke"></path>
+                </marker>
+                
+                <!-- Linear Gradients for Task Bars -->
+                <linearGradient id="grad-task" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#a78bfa"></stop>
+                  <stop offset="100%" stop-color="#7c3aed"></stop>
+                </linearGradient>
+                <linearGradient id="grad-task-light" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#8b5cf6"></stop>
+                  <stop offset="100%" stop-color="#6d28d9"></stop>
+                </linearGradient>
+              </defs>
+              <!-- Content elements: background vertical grids, task elements, predecessor paths -->
+              <g id="svg-grid-lines"><line x1="0" y1="0" x2="0" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="55" y1="0" x2="55" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="109" y1="0" x2="109" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="164" y1="0" x2="164" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="218" y1="0" x2="218" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="273" y1="0" x2="273" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="328" y1="0" x2="328" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="382" y1="0" x2="382" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="437" y1="0" x2="437" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="491" y1="0" x2="491" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="546" y1="0" x2="546" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="601" y1="0" x2="601" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="655" y1="0" x2="655" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="710" y1="0" x2="710" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="765" y1="0" x2="765" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="819" y1="0" x2="819" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="874" y1="0" x2="874" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="928" y1="0" x2="928" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="983" y1="0" x2="983" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="1038" y1="0" x2="1038" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="1092" y1="0" x2="1092" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="1147" y1="0" x2="1147" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="1201" y1="0" x2="1201" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="1256" y1="0" x2="1256" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="1311" y1="0" x2="1311" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line><line x1="1365" y1="0" x2="1365" y2="2928" stroke="var(--grid-line-color)" stroke-width="0.5"></line></g>
+              <g id="svg-predecessors"><path d="M 86 120 H 92 V 168 H 109" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-3 dep-to-4"></path><path d="M 140 168 H 146 V 216 H 164" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-4 dep-to-5"></path><path d="M 234 216 H 240 V 240 H 236 V 264 H 242" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-5 dep-to-6"></path><path d="M 289 264 H 295 V 288 H 283 V 312 H 289" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-6 dep-to-7"></path><path d="M 577 408 H 583 V 456 H 601" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-9 dep-to-10"></path><path d="M 577 408 H 583 V 504 H 601" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-9 dep-to-11"></path><path d="M 601 504 H 607 V 528 H 602 V 552 H 608" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-11 dep-to-12"></path><path d="M 632 456 H 638 V 600 H 655" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-10 dep-to-13"></path><path d="M 601 504 H 607 V 600 H 655" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-11 dep-to-13"></path><path d="M 679 600 H 685 V 624 H 680 V 648 H 686" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-13 dep-to-14"></path><path d="M 632 552 H 638 V 648 H 686" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-12 dep-to-14"></path><path d="M 726 744 H 732 V 768 H 727 V 792 H 733" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-16 dep-to-17"></path><path d="M 796 792 H 802 V 840 H 819" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-17 dep-to-18"></path><path d="M 874 840 H 880 V 864 H 876 V 888 H 882" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-18 dep-to-19"></path><path d="M 679 600 H 685 V 888 H 882" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-13 dep-to-19"></path><path d="M 726 984 H 732 V 1008 H 727 V 1032 H 733" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-21 dep-to-22"></path><path d="M 796 1032 H 802 V 1080 H 819" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-22 dep-to-23"></path><path d="M 882 1080 H 888 V 1128 H 928" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-23 dep-to-24"></path><path d="M 905 888 H 911 V 1128 H 928" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-19 dep-to-24"></path><path d="M 905 888 H 911 V 1032 H 899 V 1176 H 905" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-19 dep-to-25"></path><path d="M 882 1080 H 888 V 1176 H 905" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-23 dep-to-25"></path><path d="M 796 1032 H 802 V 1272 H 819" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-22 dep-to-27"></path><path d="M 632 552 H 638 V 1272 H 819" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-12 dep-to-27"></path><path d="M 843 1272 H 849 V 1296 H 844 V 1320 H 850" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-27 dep-to-28"></path><path d="M 889 1320 H 895 V 1344 H 891 V 1368 H 897" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-28 dep-to-29"></path><path d="M 726 984 H 732 V 1224 H 727 V 1464 H 733" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-21 dep-to-31"></path><path d="M 796 1464 H 802 V 1512 H 819" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-31 dep-to-32"></path><path d="M 679 600 H 685 V 1512 H 819" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-13 dep-to-32"></path><path d="M 843 1512 H 849 V 1536 H 844 V 1560 H 850" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-32 dep-to-33"></path><path d="M 889 1560 H 895 V 1584 H 891 V 1608 H 897" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-33 dep-to-34"></path><path d="M 983 1608 H 989 V 1632 H 985 V 1656 H 991" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-34 dep-to-35"></path><path d="M 1006 1656 H 1012 V 1680 H 1008 V 1704 H 1014" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-35 dep-to-36"></path><path d="M 952 1368 H 958 V 1752 H 1069" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-29 dep-to-37"></path><path d="M 1053 1704 H 1059 V 1752 H 1069" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-36 dep-to-37"></path><path d="M 726 984 H 732 V 1416 H 727 V 1848 H 733" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-21 dep-to-39"></path><path d="M 780 1848 H 786 V 1896 H 952" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-39 dep-to-40"></path><path d="M 944 1128 H 950 V 1512 H 946 V 1896 H 952" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-24 dep-to-40"></path><path d="M 1038 1896 H 1044 V 1920 H 1039 V 1944 H 1045" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-40 dep-to-41"></path><path d="M 1061 1944 H 1067 V 1968 H 1063 V 1992 H 1069" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-41 dep-to-42"></path><path d="M 889 1560 H 895 V 1992 H 1069" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-33 dep-to-42"></path><path d="M 1108 1992 H 1114 V 2016 H 1110 V 2040 H 1116" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-42 dep-to-43"></path><path d="M 632 552 H 638 V 2040 H 1116" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-12 dep-to-43"></path><path d="M 944 1128 H 950 V 1632 H 946 V 2136 H 952" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-24 dep-to-45"></path><path d="M 1038 2136 H 1044 V 2160 H 1039 V 2184 H 1045" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-45 dep-to-46"></path><path d="M 1038 1896 H 1044 V 2040 H 1039 V 2184 H 1045" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-40 dep-to-46"></path><path d="M 1162 2040 H 1168 V 2232 H 1178" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-43 dep-to-47"></path><path d="M 1061 2184 H 1067 V 2232 H 1178" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-46 dep-to-47"></path><path d="M 1053 1704 H 1059 V 1992 H 1055 V 2280 H 1061" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-36 dep-to-48"></path><path d="M 1053 1704 H 1059 V 2016 H 1055 V 2328 H 1061" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-36 dep-to-49"></path><path d="M 1123 2328 H 1129 V 2376 H 1147" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-49 dep-to-50"></path><path d="M 1100 2280 H 1106 V 2424 H 1225" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-48 dep-to-51"></path><path d="M 1217 2376 H 1223 V 2400 H 1219 V 2424 H 1225" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-50 dep-to-51"></path><path d="M 944 1128 H 950 V 1824 H 946 V 2520 H 952" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-24 dep-to-53"></path><path d="M 1038 2520 H 1044 V 2544 H 1039 V 2568 H 1045" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-53 dep-to-54"></path><path d="M 1069 2568 H 1075 V 2616 H 1170" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-54 dep-to-55"></path><path d="M 1162 2040 H 1168 V 2328 H 1164 V 2616 H 1170" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-43 dep-to-55"></path><path d="M 1256 2424 H 1262 V 2664 H 1272" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-51 dep-to-56"></path><path d="M 1209 2616 H 1215 V 2664 H 1272" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-55 dep-to-56"></path><path d="M 1209 2616 H 1215 V 2712 H 1264" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-55 dep-to-57"></path><path d="M 1256 2424 H 1262 V 2568 H 1258 V 2712 H 1264" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-51 dep-to-57"></path><path d="M 1209 2616 H 1215 V 2688 H 1211 V 2760 H 1217" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-55 dep-to-58"></path><path d="M 1311 2712 H 1317 V 2760 H 1312 V 2808 H 1318" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-57 dep-to-59"></path><path d="M 1272 2760 H 1278 V 2808 H 1318" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-58 dep-to-59"></path><path d="M 1311 2712 H 1317 V 2784 H 1312 V 2856 H 1318" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-57 dep-to-60"></path><path d="M 1272 2760 H 1278 V 2856 H 1318" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-58 dep-to-60"></path><path d="M 1342 2856 H 1348 V 2880 H 1336 V 2904 H 1342" fill="none" stroke="var(--arrow-color)" stroke-width="1.5" marker-end="url(#arrow)" class="dep-link dep-from-60 dep-to-61"></path></g>
+              <g id="svg-tasks"><rect x="0" y="0" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-1" data-id="1"><path d="
+            M 55 22 
+            V 16 
+            H 1342 
+            V 22 
+            L 1338 18 
+            H 59 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><rect x="55" y="17" width="90" height="2" fill="var(--text-primary)"></rect><text x="57" y="34" fill="var(--text-secondary)" font-size="10px" font-weight="600">Proyecto final - Sistema IoT de detección y monitoreo</text></g><rect x="0" y="48" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-2" data-id="2"><path d="
+            M 55 70 
+            V 64 
+            H 289 
+            V 70 
+            L 285 66 
+            H 59 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><rect x="55" y="65" width="234" height="2" fill="var(--text-primary)"></rect><text x="57" y="82" fill="var(--text-secondary)" font-size="10px" font-weight="600">Inicio, planificación y definición técnica</text></g><rect x="0" y="96" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-3" data-id="3"><rect x="55" y="109" width="31" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><rect x="55" y="110" width="29" height="20" rx="4" ry="4" fill="url(#grad-task-light)"></rect><g><circle cx="102" cy="120" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="102" y="123" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g><g><circle cx="116" cy="120" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="116" y="123" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="144" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-4" data-id="4"><rect x="109" y="157" width="31" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><rect x="109" y="158" width="29" height="20" rx="4" ry="4" fill="url(#grad-task-light)"></rect><g><circle cx="156" cy="168" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="156" y="171" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="170" cy="168" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="170" y="171" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="184" cy="168" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="184" y="171" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="192" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-5" data-id="5"><rect x="164" y="205" width="70" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><rect x="164" y="206" width="68" height="20" rx="4" ry="4" fill="url(#grad-task-light)"></rect><g><circle cx="250" cy="216" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="250" y="219" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="264" cy="216" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="264" y="219" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="240" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-6" data-id="6"><rect x="242" y="253" width="47" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><rect x="242" y="254" width="45" height="20" rx="4" ry="4" fill="url(#grad-task-light)"></rect><g><circle cx="305" cy="264" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="305" y="267" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="319" cy="264" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="319" y="267" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="288" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-7" data-id="7"><polygon points="289,304 297,312 289,320 281,312" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="303" y="316" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.01</text></g><rect x="0" y="336" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-8" data-id="8"><path d="
+            M 343 358 
+            V 352 
+            H 679 
+            V 358 
+            L 675 354 
+            H 347 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="345" y="370" fill="var(--text-secondary)" font-size="10px" font-weight="600">Despliegue principal de nodos</text></g><rect x="0" y="384" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-9" data-id="9"><rect x="343" y="397" width="234" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="593" cy="408" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="593" y="411" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="432" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-10" data-id="10"><rect x="601" y="445" width="31" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="648" cy="456" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="648" y="459" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="662" cy="456" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="662" y="459" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="480" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-11" data-id="11"><rect x="601" y="493" width="2" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="617" cy="504" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="617" y="507" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="631" cy="504" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="631" y="507" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="528" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-12" data-id="12"><rect x="608" y="541" width="24" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="648" cy="552" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="648" y="555" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="662" cy="552" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="662" y="555" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="576" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-13" data-id="13"><rect x="655" y="589" width="24" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="695" cy="600" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="695" y="603" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="709" cy="600" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="709" y="603" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="723" cy="600" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="723" y="603" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="624" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-14" data-id="14"><polygon points="686,640 694,648 686,656 678,648" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="700" y="652" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.02</text></g><rect x="0" y="672" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-15" data-id="15"><path d="
+            M 655 694 
+            V 688 
+            H 905 
+            V 694 
+            L 901 690 
+            H 659 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="657" y="706" fill="var(--text-secondary)" font-size="10px" font-weight="600">Monitoreo acústico y transmisión de eventos</text></g><rect x="0" y="720" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-16" data-id="16"><rect x="655" y="733" width="71" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="742" cy="744" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="742" y="747" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="768" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-17" data-id="17"><rect x="733" y="781" width="63" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="812" cy="792" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="812" y="795" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="826" cy="792" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="826" y="795" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g></g><rect x="0" y="816" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-18" data-id="18"><rect x="819" y="829" width="55" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="890" cy="840" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="890" y="843" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="904" cy="840" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="904" y="843" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="864" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-19" data-id="19"><rect x="882" y="877" width="23" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="921" cy="888" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="921" y="891" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="935" cy="888" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="935" y="891" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="949" cy="888" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="949" y="891" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="912" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-20" data-id="20"><path d="
+            M 655 934 
+            V 928 
+            H 944 
+            V 934 
+            L 940 930 
+            H 659 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="657" y="946" fill="var(--text-secondary)" font-size="10px" font-weight="600">Backend, persistencia y almacenamiento</text></g><rect x="0" y="960" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-21" data-id="21"><rect x="655" y="973" width="71" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="742" cy="984" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="742" y="987" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g><g><circle cx="756" cy="984" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="756" y="987" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g></g><rect x="0" y="1008" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-22" data-id="22"><rect x="733" y="1021" width="63" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="812" cy="1032" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="812" y="1035" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1056" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-23" data-id="23"><rect x="819" y="1069" width="63" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="898" cy="1080" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="898" y="1083" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g><g><circle cx="912" cy="1080" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="912" y="1083" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g></g><rect x="0" y="1104" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-24" data-id="24"><rect x="928" y="1117" width="16" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="960" cy="1128" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="960" y="1131" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g><g><circle cx="974" cy="1128" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="974" y="1131" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g></g><rect x="0" y="1152" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-25" data-id="25"><polygon points="905,1168 913,1176 905,1184 897,1176" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="919" y="1180" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.03</text></g><rect x="0" y="1200" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-26" data-id="26"><path d="
+            M 601 1222 
+            V 1216 
+            H 952 
+            V 1222 
+            L 948 1218 
+            H 605 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="603" y="1234" fill="var(--text-secondary)" font-size="10px" font-weight="600">Gestión de dispositivos IoT</text></g><rect x="0" y="1248" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-27" data-id="27"><rect x="819" y="1261" width="24" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="859" cy="1272" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="859" y="1275" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1296" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-28" data-id="28"><rect x="850" y="1309" width="39" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="905" cy="1320" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="905" y="1323" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1344" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-29" data-id="29"><rect x="897" y="1357" width="55" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="968" cy="1368" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="968" y="1371" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="982" cy="1368" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="982" y="1371" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1392" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-30" data-id="30"><path d="
+            M 733 1414 
+            V 1408 
+            H 1053 
+            V 1414 
+            L 1049 1410 
+            H 737 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="735" y="1426" fill="var(--text-secondary)" font-size="10px" font-weight="600">Gestión de árboles y observaciones</text></g><rect x="0" y="1440" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-31" data-id="31"><rect x="733" y="1453" width="63" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="812" cy="1464" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="812" y="1467" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1488" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-32" data-id="32"><rect x="819" y="1501" width="24" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="859" cy="1512" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="859" y="1515" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g><g><circle cx="873" cy="1512" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="873" y="1515" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="1536" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-33" data-id="33"><rect x="850" y="1549" width="39" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="905" cy="1560" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="905" y="1563" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1584" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-34" data-id="34"><rect x="897" y="1597" width="86" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="999" cy="1608" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="999" y="1611" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g><g><circle cx="1013" cy="1608" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1013" y="1611" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g></g><rect x="0" y="1632" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-35" data-id="35"><rect x="991" y="1645" width="15" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1022" cy="1656" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1022" y="1659" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1036" cy="1656" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1036" y="1659" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="1680" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-36" data-id="36"><rect x="1014" y="1693" width="39" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1069" cy="1704" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1069" y="1707" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1083" cy="1704" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1083" y="1707" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1728" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-37" data-id="37"><polygon points="1069,1744 1077,1752 1069,1760 1061,1752" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="1083" y="1756" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.04</text></g><rect x="0" y="1776" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-38" data-id="38"><path d="
+            M 733 1798 
+            V 1792 
+            H 1162 
+            V 1798 
+            L 1158 1794 
+            H 737 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="735" y="1810" fill="var(--text-secondary)" font-size="10px" font-weight="600">Plataforma web y visualización</text></g><rect x="0" y="1824" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-39" data-id="39"><rect x="733" y="1837" width="47" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="796" cy="1848" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="796" y="1851" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="1872" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-40" data-id="40"><rect x="952" y="1885" width="86" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1054" cy="1896" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1054" y="1899" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="1920" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-41" data-id="41"><rect x="1045" y="1933" width="16" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1077" cy="1944" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1077" y="1947" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="1091" cy="1944" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1091" y="1947" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="1968" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-42" data-id="42"><rect x="1069" y="1981" width="39" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1124" cy="1992" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1124" y="1995" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="2016" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-43" data-id="43"><rect x="1116" y="2029" width="46" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1178" cy="2040" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1178" y="2043" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="1192" cy="2040" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1192" y="2043" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2064" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-44" data-id="44"><path d="
+            M 952 2086 
+            V 2080 
+            H 1256 
+            V 2086 
+            L 1252 2082 
+            H 956 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="954" y="2098" fill="var(--text-secondary)" font-size="10px" font-weight="600">Alertas, exportación e integración externa</text></g><rect x="0" y="2112" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-45" data-id="45"><rect x="952" y="2125" width="86" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1054" cy="2136" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1054" y="2139" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1068" cy="2136" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1068" y="2139" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2160" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-46" data-id="46"><rect x="1045" y="2173" width="16" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1077" cy="2184" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1077" y="2187" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="2208" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-47" data-id="47"><polygon points="1178,2224 1186,2232 1178,2240 1170,2232" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="1192" y="2236" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.05</text></g><rect x="0" y="2256" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-48" data-id="48"><rect x="1061" y="2269" width="39" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1116" cy="2280" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1116" y="2283" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1130" cy="2280" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1130" y="2283" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2304" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-49" data-id="49"><rect x="1061" y="2317" width="62" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1139" cy="2328" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1139" y="2331" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2352" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-50" data-id="50"><rect x="1147" y="2365" width="70" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1233" cy="2376" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1233" y="2379" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1247" cy="2376" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1247" y="2379" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2400" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-51" data-id="51"><rect x="1225" y="2413" width="31" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1272" cy="2424" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1272" y="2427" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1286" cy="2424" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1286" y="2427" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2448" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-52" data-id="52"><path d="
+            M 952 2470 
+            V 2464 
+            H 1342 
+            V 2470 
+            L 1338 2466 
+            H 956 
+            Z
+          " fill="var(--task-summary-border)" class="task-bar-rect"></path><text x="954" y="2482" fill="var(--text-secondary)" font-size="10px" font-weight="600">Infraestructura, pruebas y cierre</text></g><rect x="0" y="2496" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-53" data-id="53"><rect x="952" y="2509" width="86" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1054" cy="2520" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1054" y="2523" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2544" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-54" data-id="54"><rect x="1045" y="2557" width="24" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1085" cy="2568" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1085" y="2571" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2592" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-55" data-id="55"><rect x="1170" y="2605" width="39" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1225" cy="2616" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1225" y="2619" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2640" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-56" data-id="56"><polygon points="1272,2656 1280,2664 1272,2672 1264,2664" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="1286" y="2668" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.06</text></g><rect x="0" y="2688" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-57" data-id="57"><rect x="1264" y="2701" width="47" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1327" cy="2712" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1327" y="2715" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="1341" cy="2712" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1341" y="2715" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1355" cy="2712" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1355" y="2715" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2736" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-58" data-id="58"><rect x="1217" y="2749" width="55" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1288" cy="2760" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1288" y="2763" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1302" cy="2760" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1302" y="2763" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g><g><circle cx="1316" cy="2760" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1316" y="2763" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g></g><rect x="0" y="2784" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-59" data-id="59"><polygon points="1318,2800 1326,2808 1318,2816 1310,2808" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="1332" y="2812" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.07</text></g><rect x="0" y="2832" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-60" data-id="60"><rect x="1318" y="2845" width="24" height="22" rx="5" ry="5" fill="var(--task-normal-bg)" stroke="var(--task-normal-border)" stroke-width="1" class="task-bar-rect"></rect><g><circle cx="1358" cy="2856" r="8" fill="#8b5cf6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1358" y="2859" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">MR</text><title>Mateo Rodríguez</title></g><g><circle cx="1372" cy="2856" r="8" fill="#3b82f6" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1372" y="2859" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">EG</text><title>Eduardo Gimeno</title></g><g><circle cx="1386" cy="2856" r="8" fill="#10b981" stroke="var(--bg-secondary)" stroke-width="1"></circle><text x="1386" y="2859" text-anchor="middle" fill="#ffffff" font-size="7px" font-weight="700">LC</text><title>Leandro Cabrera</title></g></g><rect x="0" y="2880" width="1412" height="48" fill="transparent" stroke="var(--grid-line-color)" stroke-width="0.5"></rect><g class="task-bar-g task-bar-id-61" data-id="61"><polygon points="1342,2896 1350,2904 1342,2912 1334,2904" fill="var(--task-milestone-color)" class="task-bar-rect"></polygon><text x="1356" y="2908" fill="var(--text-primary)" font-size="11px" font-weight="600">Hito: HITO H.08</text></g></g>
+              <g id="svg-today-line"><line x1="312" y1="0" x2="312" y2="2928" stroke="var(--today-line-color)" stroke-width="1.5" stroke-dasharray="4 4"></line></g>
+            </svg>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- TOOLTIP -->
+  <div class="gantt-tooltip" id="gantt-tooltip" style="left: 1014px; top: 224px;">
+        <div class="tooltip-header">Proyecto final - Sistema IoT de detección y monitoreo</div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">ID:</span>
+          <span class="tooltip-value">1</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Inicio:</span>
+          <span class="tooltip-value">1 jun 2026</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Fin:</span>
+          <span class="tooltip-value">13 nov 2026</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Duración:</span>
+          <span class="tooltip-value">116 días</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Progreso:</span>
+          <span class="tooltip-value">7%</span>
+        </div>
+      </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // PRELOADED DEMO CSV DATA (Online_Gantt_final_v2.csv)
+    const defaultCSVData = `Outline Level,ID,Name,Start,Finish,Duration,% Complete,Predecessors,Resource Names,Color,Notes
+1,1,Proyecto final - Sistema IoT de detección y monitoreo,2026-06-01,2026-11-13,116 day,7,,,,
+2,2,"Inicio, planificación y definición técnica",2026-06-01,2026-07-01,23 day,100,,Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+3,3,Planificación inicial del proyecto y organización del backlog,2026-06-01,2026-06-05,5 day,100,,Leandro Cabrera; Mateo Rodríguez,,
+3,4,"Revisión y ajuste de requerimientos, alcance del MVP y priorización",2026-06-08,2026-06-12,5 day,100,3FS,Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+3,5,"Definición de arquitectura, almacenamiento y lineamientos técnicos",2026-06-15,2026-06-24,8 day,100,4FS,Eduardo Gimeno; Mateo Rodríguez,,
+3,6,Definición del modelo de datos y protocolo de telemetría,2026-06-25,2026-07-01,5 day,100,5FS,Eduardo Gimeno; Leandro Cabrera,,
+3,7,HITO H.01 - Planificación del proyecto aprobada,2026-07-01,2026-07-01,0 day,0,6FS,,,Hito de referencia. Fecha solicitada 20/06/2026 cae en sábado (fuera de calendario laboral); se ancla al cierre de la fase de planificación y definición técnica.
+2,8,Despliegue principal de nodos,2026-07-08,2026-08-20,32 day,0,,Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+3,9,Compra de componentes para despliegue principal de nodos,2026-07-08,2026-08-07,23 day,0,,Leandro Cabrera,,Incluye 2 días de buffer por riesgo de plazos de proveedores/envíos.
+3,10,Armado y ensamblaje de nodos para despliegue principal,2026-08-10,2026-08-14,5 day,0,9FS,Mateo Rodríguez; Leandro Cabrera,,
+3,11,Implementación del mecanismo OTA,2026-08-10,2026-08-10,1 day,0,9FS,Mateo Rodríguez; Leandro Cabrera,,"Debe quedar implementado ANTES de instalar nodos en campo, para poder actualizarlos remotamente desde el inicio."
+3,12,Validación de gestión remota y operación de dispositivos,2026-08-11,2026-08-14,4 day,0,11FS,Mateo Rodríguez; Leandro Cabrera,,
+3,13,Instalación y validación del despliegue principal en áreas controladas,2026-08-17,2026-08-20,4 day,0,"10FS,11FS",Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+3,14,HITO H.02 - Prototipo funcional validado,2026-08-21,2026-08-21,0 day,0,"13FS,12FS",,,
+2,15,Monitoreo acústico y transmisión de eventos,2026-08-17,2026-09-18,25 day,0,,Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+3,16,Implementación de captura de señales acústicas y vibracionales en el nodo,2026-08-17,2026-08-26,8 day,0,,Mateo Rodríguez,,
+3,17,Implementación del procesamiento local de señales y extracción de métricas,2026-08-27,2026-09-04,7 day,0,16FS,Mateo Rodríguez; Eduardo Gimeno,,
+3,18,Implementación de transmisión de eventos y telemetría desde el nodo,2026-09-07,2026-09-14,6 day,0,17FS,Mateo Rodríguez; Leandro Cabrera,,
+3,19,"Validación del flujo completo captura, procesamiento y transmisión",2026-09-15,2026-09-18,4 day,0,"18FS,13FS",Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+2,20,"Backend, persistencia y almacenamiento",2026-08-17,2026-09-23,26 day,0,,Eduardo Gimeno; Leandro Cabrera,,
+3,21,Implementación de base de datos y estructuras de persistencia,2026-08-17,2026-08-26,8 day,0,,Leandro Cabrera; Eduardo Gimeno,,
+3,22,Implementación de ingesta de eventos y telemetría en backend,2026-08-27,2026-09-04,7 day,0,21FS,Leandro Cabrera,,
+3,23,"Implementación del almacenamiento de muestras, métricas y evidencia",2026-09-07,2026-09-15,7 day,0,22FS,Leandro Cabrera; Eduardo Gimeno,,
+3,24,Validación del almacenamiento histórico y consistencia de datos,2026-09-21,2026-09-23,3 day,0,"23FS,19FS",Leandro Cabrera; Eduardo Gimeno,,
+3,25,HITO H.03 - Flujo nodo - backend operativo,2026-09-18,2026-09-18,0 day,0,"19FS,23FS",,,
+2,26,Gestión de dispositivos IoT,2026-08-10,2026-09-24,33 day,0,,Mateo Rodríguez; Leandro Cabrera,,
+3,27,Implementación del registro e identificación de nodos en la plataforma,2026-09-07,2026-09-10,4 day,0,"22FS,12FS",Leandro Cabrera,,
+3,28,Implementación del monitoreo de estado y salud de nodos,2026-09-11,2026-09-16,4 day,0,27FS,Leandro Cabrera,,
+3,29,Implementación de configuración remota de parámetros,2026-09-17,2026-09-24,6 day,0,28FS,Mateo Rodríguez; Leandro Cabrera,,Incluye 1 día de buffer.
+2,30,Gestión de árboles y observaciones,2026-08-27,2026-10-07,30 day,0,,Eduardo Gimeno; Leandro Cabrera,,
+3,31,Implementación del registro y gestión de árboles monitoreados,2026-08-27,2026-09-04,7 day,0,21FS,Leandro Cabrera,,
+3,32,Implementación de la asociación nodo-árbol,2026-09-07,2026-09-10,4 day,0,"31FS,13FS",Leandro Cabrera; Mateo Rodríguez,,
+3,33,"Implementación de estado, ubicación e historial de árboles",2026-09-11,2026-09-16,4 day,0,32FS,Leandro Cabrera,,
+3,34,Registro de observaciones externas e intervenciones,2026-09-17,2026-09-28,8 day,0,33FS,Leandro Cabrera; Eduardo Gimeno,,"Incluye 2 días de buffer por ser trabajo de campo, más sujeto a imprevistos (clima, acceso a árboles, disponibilidad de datos)."
+3,35,Implementación del etiquetado manual de eventos,2026-09-29,2026-10-01,3 day,0,34FS,Eduardo Gimeno; Mateo Rodríguez,,
+3,36,Validación del flujo de observaciones y etiquetado,2026-10-02,2026-10-07,4 day,0,35FS,Eduardo Gimeno; Leandro Cabrera,,Incluye 1 día de buffer.
+3,37,HITO H.04 - Gestión básica de nodos y árboles implementada,2026-10-09,2026-10-09,0 day,0,"29FS,36FS",,,
+2,38,Plataforma web y visualización,2026-08-27,2026-10-21,41 day,0,,Mateo Rodríguez; Leandro Cabrera,,
+3,39,Inicialización de la plataforma web y estructura base del frontend,2026-08-27,2026-09-02,5 day,0,21FS,Mateo Rodríguez,,
+3,40,Implementación de dashboard de monitoreo y visualización general,2026-09-24,2026-10-05,8 day,0,"39FS,24FS",Mateo Rodríguez,,
+3,41,Implementación de consulta y filtrado histórico,2026-10-06,2026-10-08,3 day,0,40FS,Mateo Rodríguez; Leandro Cabrera,,
+3,42,"Implementación de vistas de detalle de árboles, nodos y eventos",2026-10-09,2026-10-14,4 day,0,"41FS,33FS",Mateo Rodríguez,,
+3,43,Integración frontend-backend y validación de visualización,2026-10-15,2026-10-21,5 day,0,"42FS,12FS",Mateo Rodríguez; Leandro Cabrera,,
+2,44,"Alertas, exportación e integración externa",2026-09-24,2026-11-02,29 day,0,,Eduardo Gimeno; Leandro Cabrera; Mateo Rodríguez,,
+3,45,Implementación de reglas de alertas y eventos relevantes,2026-09-24,2026-10-05,8 day,0,24FS,Eduardo Gimeno; Leandro Cabrera,,
+3,46,Implementación de visualización y gestión de alertas en plataforma,2026-10-06,2026-10-08,3 day,0,"45FS,40FS",Mateo Rodríguez,,
+3,47,"HITO H.05 - MVP con dashboard, histórico y alertas disponible",2026-10-23,2026-10-23,0 day,0,"43FS,46FS",,,
+3,48,Implementación de exportación de datos y datasets históricos,2026-10-08,2026-10-13,4 day,0,36FS,Eduardo Gimeno; Leandro Cabrera,,
+3,49,Implementación de endpoints y mecanismos de interoperabilidad con sistemas externos,2026-10-08,2026-10-16,7 day,0,36FS,Leandro Cabrera,,
+3,50,Documentación de APIs para intercambio bidireccional de datos,2026-10-19,2026-10-28,8 day,0,49FS,Eduardo Gimeno; Leandro Cabrera,,Incluye 3 días de buffer; la documentación técnica suele subestimarse y es clave para la integración externa.
+3,51,Validación de exportación e integración externa a nivel de interfaz,2026-10-29,2026-11-02,3 day,0,"48FS,50FS",Eduardo Gimeno; Leandro Cabrera,,Incluye 1 día de buffer.
+2,52,"Infraestructura, pruebas y cierre",2026-09-24,2026-11-13,37 day,0,,Leandro Cabrera; Mateo Rodríguez; Eduardo Gimeno,,
+3,53,"Preparación de infraestructura, contenedores y servicios de despliegue",2026-09-24,2026-10-05,8 day,0,24FS,Leandro Cabrera,,
+3,54,Implementación de autenticación y configuración operativa básica,2026-10-06,2026-10-09,4 day,0,53FS,Leandro Cabrera,,Incluye 1 día de buffer.
+3,55,Despliegue de la solución en entorno servidor/cloud,2026-10-22,2026-10-27,4 day,0,"54FS,43FS",Leandro Cabrera,,Incluye 1 día de buffer.
+3,56,"HITO H.06 - Integraciones, exportación y despliegue completados",2026-11-04,2026-11-04,0 day,0,"51FS,55FS",,,
+3,57,Pruebas integrales del sistema y corrección de incidencias,2026-11-03,2026-11-09,5 day,0,"55FS,51FS",Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+3,58,Consolidación de documentación técnica y resultados del proyecto,2026-10-28,2026-11-04,6 day,0,55FS,Eduardo Gimeno; Leandro Cabrera; Mateo Rodríguez,,
+3,59,HITO H.07 - Pruebas finales y documentación consolidadas,2026-11-10,2026-11-10,0 day,0,"57FS,58FS",,,
+3,60,"Preparación de entrega final, demo y cierre del proyecto",2026-11-10,2026-11-13,4 day,0,"57FS,58FS",Mateo Rodríguez; Eduardo Gimeno; Leandro Cabrera,,
+3,61,HITO H.08 - Entrega final del proyecto,2026-11-13,2026-11-13,0 day,0,60FS,,,`;
+
+    // APP STATE
+    let currentCSVData = defaultCSVData;
+    let tasks = [];
+    let visibleTasks = [];
+    let zoomLevel = 'day'; // 'day', 'week', 'month'
+    let currentTheme = 'light';
+    
+    // Filters & Search
+    let searchQuery = '';
+    let resourceFilter = '';
+    let statusFilter = '';
+    
+    // Hierarchy Management
+    const collapsedIds = new Set();
+    
+    // Constant coordinates configuration
+    const config = {
+      headerHeight: 64,
+      rowHeight: 48,
+      taskBarHeight: 22,
+      // Date scale sizing pixels per day
+      zoom: {
+        day: 36,
+        week: 10,
+        month: 3
+      }
+    };
+    
+    // COLOR PALETTE SYSTEM FOR RESOURCES
+    const resourceColors = {
+      'Leandro Cabrera': '#10b981', // Emerald
+      'Mateo Rodríguez': '#8b5cf6', // Violet
+      'Eduardo Gimeno': '#3b82f6',  // Blue
+    };
+    
+    const colorsList = ['#f43f5e', '#ec4899', '#d946ef', '#06b6d4', '#f59e0b', '#84cc16'];
+    let colorCounter = 0;
+    
+    function getResourceColor(name) {
+      if (!name) return '#64748b';
+      const cleanName = name.trim();
+      if (resourceColors[cleanName]) return resourceColors[cleanName];
+      // Generate dynamically and store
+      const color = colorsList[colorCounter % colorsList.length];
+      colorCounter++;
+      resourceColors[cleanName] = color;
+      return color;
+    }
+
+    function getInitials(name) {
+      if (!name) return '';
+      return name.split(' ')
+                 .map(p => p.trim())
+                 .filter(p => p.length > 0)
+                 .map(p => p[0].toUpperCase())
+                 .slice(0, 2)
+                 .join('');
+    }
+
+    // INITIALIZATION
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      
+      // Setup drag and drop events
+      const dropZone = document.getElementById('drop-zone');
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      });
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+      });
+      
+      // Setup window resize handler for Zoom to Fit recalculations
+      window.addEventListener('resize', () => {
+        if (zoomLevel === 'fit' && tasks.length > 0) {
+          renderGantt();
+        }
+      });
+    });
+
+
+    // FILE LOADING
+    function triggerFileInput() {
+      document.getElementById('file-input').click();
+    }
+
+    function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      readFile(file);
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('dragover');
+    }
+
+    function handleDragLeave(e) {
+      e.currentTarget.classList.remove('dragover');
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.csv')) {
+        readFile(file);
+      } else {
+        alert('Por favor, selecciona un archivo CSV válido.');
+      }
+    }
+
+    function readFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        parseAndLoadCSV(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+
+    function loadSampleData() {
+      parseAndLoadCSV(defaultCSVData);
+    }
+
+    // CSV PARSING & DATA NORMALIZATION
+    function parseAndLoadCSV(csvText) {
+      currentCSVData = csvText;
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: 'greedy',
+        complete: (results) => {
+          if (results.errors.length > 0) {
+            console.warn("CSV parsing errors found:", results.errors);
+          }
+          
+          processRawData(results.data);
+        },
+        error: (err) => {
+          alert('Error al leer el archivo CSV: ' + err.message);
+        }
+      });
+    }
+
+    function parseDate(dateStr) {
+      if (!dateStr) return null;
+      const clean = dateStr.trim();
+      const parts = clean.split('-');
+      if (parts.length === 3) {
+        // Local date mapping to avoid UTC conversion shifts
+        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      }
+      const date = new Date(clean);
+      return isNaN(date.getTime()) ? null : date;
+    }
+
+    function processRawData(data) {
+      // Map columns correctly to robust keys
+      tasks = data.map((row, idx) => {
+        // Outline Level mapping
+        const level = parseInt(row['Outline Level'] || row['Nivel de esquema']) || 1;
+        const id = (row['ID'] || row['Id'] || String(idx + 1)).trim();
+        const name = row['Name'] || row['Nombre'] || row['Name'] || 'Tarea sin nombre';
+        const start = parseDate(row['Start'] || row['Comienzo'] || row['Inicio']);
+        const finish = parseDate(row['Finish'] || row['Fin'] || row['Finalización']);
+        
+        // Parse duration
+        const durationStr = row['Duration'] || row['Duración'] || '0 day';
+        const duration = parseInt(durationStr) || 0;
+        
+        // Parse % Complete
+        const progressStr = row['% Complete'] || row['% completado'] || row['Progress'] || '0';
+        const progress = parseInt(progressStr.replace('%', '')) || 0;
+        
+        // Resource Names (semicolon separated)
+        const resourcesStr = row['Resource Names'] || row['Nombres de los recursos'] || row['Resources'] || '';
+        const resources = resourcesStr ? resourcesStr.split(';').map(r => r.trim()).filter(r => r.length > 0) : [];
+        
+        // Predecessors parsing
+        const predStr = row['Predecessors'] || row['Predecesoras'] || '';
+        const predecessors = parsePredecessors(predStr);
+        
+        const notes = row['Notes'] || row['Notas'] || '';
+        const color = row['Color'] || null;
+
+        return {
+          id,
+          name,
+          outlineLevel: level,
+          start,
+          finish,
+          duration,
+          progress,
+          resources,
+          predecessors,
+          notes,
+          color,
+          parentId: null,
+          childrenIds: []
+        };
+      }).filter(t => t.start && t.finish); // Filter out tasks without valid dates
+
+      // Process Parent-Child Hierarchy Relationships
+      const stack = [];
+      tasks.forEach(task => {
+        const level = task.outlineLevel;
+        // Parent is the task at level - 2 in the stack (level is 1-indexed)
+        const parent = stack[level - 2];
+        if (parent) {
+          task.parentId = parent.id;
+          parent.childrenIds.push(task.id);
+        }
+        
+        stack[level - 1] = task;
+        stack.length = level; // Truncate values beyond current level
+      });
+
+      // Populate resource filter dropdown dynamically
+      populateResourceDropdown();
+      
+      // Hide welcome overlay & render gantt
+      document.getElementById('welcome-overlay').classList.add('hidden');
+      document.getElementById('gantt-grid').style.display = 'flex';
+      document.getElementById('btn-export').removeAttribute('disabled');
+      document.getElementById('btn-export-html').removeAttribute('disabled');
+      
+      // Reset collapsed elements
+      collapsedIds.clear();
+      
+      // Initial Gantt Render
+      renderGantt();
+    }
+
+    function parsePredecessors(predStr) {
+      if (!predStr) return [];
+      // Split by comma
+      return predStr.split(',').map(item => {
+        const clean = item.trim();
+        const match = clean.match(/^(\d+)(FS|SS|FF|SF)?$/i);
+        if (match) {
+          return {
+            id: match[1],
+            type: (match[2] || 'FS').toUpperCase()
+          };
+        }
+        return null;
+      }).filter(Boolean);
+    }
+
+    function populateResourceDropdown() {
+      const dropdown = document.getElementById('resource-filter');
+      dropdown.innerHTML = '<option value="">Todos los recursos</option>';
+      
+      // Extract unique resource list
+      const allResources = new Set();
+      tasks.forEach(t => t.resources.forEach(r => allResources.add(r)));
+      
+      Array.from(allResources).sort().forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        dropdown.appendChild(opt);
+      });
+    }
+
+    // STATE CHANGE HANDLERS
+    function changeZoom(zoom) {
+      zoomLevel = zoom;
+      
+      document.querySelectorAll('.segment-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`zoom-${zoom}`).classList.add('active');
+      
+      if (tasks.length > 0) {
+        renderGantt();
+      }
+    }
+
+    function handleSearch(e) {
+      searchQuery = e.target.value.toLowerCase().trim();
+      renderGantt();
+    }
+
+    function handleResourceFilter(e) {
+      resourceFilter = e.target.value;
+      renderGantt();
+    }
+
+    function handleStatusFilter(e) {
+      statusFilter = e.target.value;
+      renderGantt();
+    }
+
+    // INTERACTIVE COLLAPSE MANAGEMENT
+    function toggleCollapse(id, event) {
+      event.stopPropagation();
+      if (collapsedIds.has(id)) {
+        collapsedIds.delete(id);
+      } else {
+        collapsedIds.add(id);
+      }
+      renderGantt();
+    }
+
+    // GANTT RENDERING ENGINE
+    function renderGantt() {
+      // 1. Filter and build visibility list
+      // A task is visible if its parent is not collapsed AND it matches filters
+      const tasksMap = {};
+      tasks.forEach(t => tasksMap[t.id] = t);
+      
+      // Build visibility state based on hierarchy collapse
+      function isAncestorCollapsed(task) {
+        let parentId = task.parentId;
+        while (parentId) {
+          if (collapsedIds.has(parentId)) return true;
+          const parent = tasksMap[parentId];
+          if (!parent) break;
+          parentId = parent.parentId;
+        }
+        return false;
+      }
+
+      // Filter tasks based on Search query & Dropdown selections
+      visibleTasks = tasks.filter(task => {
+        // Level collapse check
+        if (isAncestorCollapsed(task)) return false;
+        
+        // Search query filter
+        if (searchQuery) {
+          const matchName = task.name.toLowerCase().includes(searchQuery);
+          const matchId = task.id.toLowerCase().includes(searchQuery);
+          const matchNotes = task.notes.toLowerCase().includes(searchQuery);
+          const matchResources = task.resources.some(r => r.toLowerCase().includes(searchQuery));
+          if (!matchName && !matchId && !matchNotes && !matchResources) return false;
+        }
+        
+        // Resource filter
+        if (resourceFilter && !task.resources.includes(resourceFilter)) {
+          return false;
+        }
+        
+        // Status filter
+        if (statusFilter) {
+          if (statusFilter === 'completed' && task.progress !== 100) return false;
+          if (statusFilter === 'in_progress' && (task.progress <= 0 || task.progress >= 100)) return false;
+          if (statusFilter === 'not_started' && task.progress !== 0) return false;
+        }
+        
+        return true;
+      });
+
+      // Update task count indicators
+      document.getElementById('task-visible-count').textContent = `${visibleTasks.length} de ${tasks.length} tareas`;
+      
+      // Update statistics
+      updateFilterStats();
+
+      // Render the HTML Table Part
+      renderTable();
+
+      // Render the SVG Timeline Part
+      renderTimeline();
+    }
+
+    function updateFilterStats() {
+      const statsPanel = document.getElementById('filter-stats');
+      if (visibleTasks.length === 0) {
+        statsPanel.innerHTML = '';
+        return;
+      }
+      
+      // Compute average progress of visible items
+      const sumProgress = visibleTasks.reduce((acc, t) => acc + t.progress, 0);
+      const avgProgress = Math.round(sumProgress / visibleTasks.length);
+      
+      statsPanel.innerHTML = `
+        <span>Progreso Promedio: <strong>${avgProgress}%</strong></span>
+      `;
+    }
+
+    // 1. TABLE RENDERING
+    function renderTable() {
+      const container = document.getElementById('table-rows-container');
+      container.innerHTML = '';
+      
+      if (visibleTasks.length === 0) {
+        container.innerHTML = `<div class="empty-state">No se encontraron tareas con los filtros actuales.</div>`;
+        return;
+      }
+
+      visibleTasks.forEach(task => {
+        const hasChildren = task.childrenIds.length > 0;
+        const isCollapsed = collapsedIds.has(task.id);
+        
+        // Determine indentation class/style
+        const indent = (task.outlineLevel - 1) * 16;
+        
+        const row = document.createElement('div');
+        row.className = `gantt-row table-row row-task-${task.id}`;
+        row.setAttribute('data-id', task.id);
+        
+        // Set event listeners for hover connection highlighting
+        row.addEventListener('mouseenter', () => highlightTaskDependencies(task.id, true));
+        row.addEventListener('mouseleave', () => highlightTaskDependencies(task.id, false));
+        
+        // ID element
+        const idCol = document.createElement('div');
+        idCol.className = 'task-id';
+        idCol.textContent = task.id;
+        row.appendChild(idCol);
+        
+        // Name element with tree toggler
+        const nameCol = document.createElement('div');
+        nameCol.className = 'task-name-wrapper';
+        nameCol.style.paddingLeft = `${indent}px`;
+        
+        if (hasChildren) {
+          const toggle = document.createElement('span');
+          toggle.className = `task-toggle ${isCollapsed ? 'collapsed' : ''}`;
+          toggle.innerHTML = `<i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>`;
+          toggle.onclick = (e) => toggleCollapse(task.id, e);
+          nameCol.appendChild(toggle);
+        } else {
+          // Spacer for leaf nodes
+          const spacer = document.createElement('span');
+          spacer.style.width = '20px';
+          nameCol.appendChild(spacer);
+        }
+        
+        const nameText = document.createElement('span');
+        nameText.className = `task-name level-${Math.min(task.outlineLevel, 3)}`;
+        nameText.textContent = task.name;
+        nameText.title = task.name;
+        nameCol.appendChild(nameText);
+        row.appendChild(nameCol);
+        
+        // Resources element
+        const resCol = document.createElement('div');
+        resCol.className = 'task-resources';
+        
+        task.resources.forEach(res => {
+          const avatar = document.createElement('div');
+          avatar.className = 'avatar';
+          avatar.style.backgroundColor = getResourceColor(res);
+          avatar.textContent = getInitials(res);
+          avatar.title = res;
+          resCol.appendChild(avatar);
+        });
+        
+        row.appendChild(resCol);
+        
+        container.appendChild(row);
+      });
+      
+      lucide.createIcons({ attrs: { class: 'lucide-custom' } });
+    }
+
+    // 2. TIMELINE SVG RENDERING
+    function renderTimeline() {
+      const svg = document.getElementById('gantt-svg');
+      const gridLinesGroup = document.getElementById('svg-grid-lines');
+      const gridHeadersGroup = document.getElementById('svg-grid-headers');
+      const predsGroup = document.getElementById('svg-predecessors');
+      const tasksGroup = document.getElementById('svg-tasks');
+      const todayGroup = document.getElementById('svg-today-line');
+      
+      // Clear previous outputs
+      gridLinesGroup.innerHTML = '';
+      gridHeadersGroup.innerHTML = '';
+      predsGroup.innerHTML = '';
+      tasksGroup.innerHTML = '';
+      todayGroup.innerHTML = '';
+
+      if (visibleTasks.length === 0) {
+        svg.setAttribute('width', '0');
+        svg.setAttribute('height', '0');
+        return;
+      }
+
+      // Calculate project date boundary bounds
+      let dates = [];
+      tasks.forEach(t => {
+        dates.push(t.start);
+        dates.push(t.finish);
+      });
+
+      const absoluteMinDate = new Date(Math.min(...dates));
+      const absoluteMaxDate = new Date(Math.max(...dates));
+      
+      // Adjust start & end limits with padding buffers based on zoom scale
+      let minDate, maxDate;
+      if (zoomLevel === 'day' || zoomLevel === 'fit') {
+        minDate = addDays(absoluteMinDate, -4);
+        maxDate = addDays(absoluteMaxDate, 8);
+      } else if (zoomLevel === 'week') {
+        minDate = addDays(absoluteMinDate, -14);
+        maxDate = addDays(absoluteMaxDate, 28);
+      } else {
+        minDate = addDays(absoluteMinDate, -30);
+        maxDate = addDays(absoluteMaxDate, 90);
+      }
+      
+      // Standardize ranges (e.g. alignment to week starts/month starts)
+      const alignUnit = zoomLevel === 'fit' ? 'day' : zoomLevel;
+      minDate = getStartOfUnit(minDate, alignUnit);
+      maxDate = getEndOfUnit(maxDate, alignUnit);
+      
+      const totalDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
+      
+      let pxPerDay;
+      if (zoomLevel === 'fit') {
+        const workspace = document.getElementById('gantt-workspace');
+        const table = document.getElementById('gantt-table');
+        const workspaceWidth = workspace ? workspace.clientWidth : 1200;
+        const tableWidth = table ? table.offsetWidth : 460;
+        const availableWidth = workspaceWidth - tableWidth - 40; // padding
+        pxPerDay = Math.max(0.5, availableWidth / totalDays);
+      } else {
+        pxPerDay = config.zoom[zoomLevel];
+      }
+      
+      // Compute widths & heights
+      const timelineWidth = Math.ceil(totalDays * pxPerDay);
+      const timelineHeight = visibleTasks.length * config.rowHeight;
+      
+      // Set size for body SVG
+      svg.setAttribute('width', timelineWidth);
+      svg.setAttribute('height', timelineHeight);
+      
+      // Set size for header SVG
+      const headerSvg = document.getElementById('gantt-header-svg');
+      if (headerSvg) {
+        headerSvg.setAttribute('width', timelineWidth);
+        headerSvg.setAttribute('height', config.headerHeight);
+      }
+      
+      // Draw grid columns, headers & weekend blocks
+      drawTimelineHeaderAndGrid(minDate, maxDate, pxPerDay, timelineHeight);
+
+      // Map out exact position values for layout references
+      const visibleTasksCoords = {};
+      
+      // Draw task elements
+      visibleTasks.forEach((task, index) => {
+        const y = index * config.rowHeight;
+        
+        // Calculate horizontal positions
+        const startX = Math.round((task.start - minDate) / (1000 * 60 * 60 * 24) * pxPerDay);
+        const finishX = Math.round((task.finish - minDate) / (1000 * 60 * 60 * 24) * pxPerDay);
+        let width = finishX - startX;
+        
+        if (width < 2) width = 2; // Min visible bar width
+        
+        const isMilestone = task.duration === 0;
+        
+        // Save computed coordinate centers to build predecessor connecting lines
+        visibleTasksCoords[task.id] = {
+          index,
+          startX,
+          finishX,
+          width,
+          yCenter: y + config.rowHeight / 2,
+          isMilestone
+        };
+        
+        // Create bar group container
+        const barG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        barG.setAttribute('class', `task-bar-g task-bar-id-${task.id}`);
+        barG.setAttribute('data-id', task.id);
+        
+        // Set triggers for tooltip & connector highlights
+        barG.addEventListener('mouseenter', (e) => {
+          showTooltip(task, e);
+          highlightTaskDependencies(task.id, true);
+        });
+        barG.addEventListener('mouseleave', () => {
+          hideTooltip();
+          highlightTaskDependencies(task.id, false);
+        });
+        
+        // Draw alternate rows highlight borders in SVG matching the table
+        const rowBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rowBg.setAttribute('x', '0');
+        rowBg.setAttribute('y', y);
+        rowBg.setAttribute('width', timelineWidth);
+        rowBg.setAttribute('height', config.rowHeight);
+        rowBg.setAttribute('fill', 'transparent');
+        rowBg.setAttribute('stroke', 'var(--grid-line-color)');
+        rowBg.setAttribute('stroke-width', '0.5');
+        tasksGroup.appendChild(rowBg);
+        
+        if (isMilestone) {
+          // Draw MILESTONE (Diamond shape)
+          const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+          const cx = startX;
+          const cy = y + config.rowHeight / 2;
+          const r = 8;
+          diamond.setAttribute('points', `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`);
+          diamond.setAttribute('fill', 'var(--task-milestone-color)');
+          diamond.setAttribute('class', 'task-bar-rect');
+          barG.appendChild(diamond);
+          
+          // Milestone text label indicator
+          const mText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          mText.setAttribute('x', cx + 14);
+          mText.setAttribute('y', cy + 4);
+          mText.setAttribute('fill', 'var(--text-primary)');
+          mText.setAttribute('font-size', '11px');
+          mText.setAttribute('font-weight', '600');
+          mText.textContent = `Hito: ${task.name.split(' - ')[0]}`;
+          barG.appendChild(mText);
+          
+        } else if (task.childrenIds.length > 0) {
+          // Draw SUMMARY TASK (Bracket bar)
+          const sy = y + 16;
+          const sh = 6;
+          const bracket = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          bracket.setAttribute('d', `
+            M ${startX} ${sy + sh} 
+            V ${sy} 
+            H ${finishX} 
+            V ${sy + sh} 
+            L ${finishX - 4} ${sy + 2} 
+            H ${startX + 4} 
+            Z
+          `);
+          bracket.setAttribute('fill', 'var(--task-summary-border)');
+          bracket.setAttribute('class', 'task-bar-rect');
+          barG.appendChild(bracket);
+          
+          // Draw progress block under bracket summary
+          if (task.progress > 0) {
+            const spw = Math.round(width * (task.progress / 100));
+            const sp = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            sp.setAttribute('x', startX);
+            sp.setAttribute('y', sy + 1);
+            sp.setAttribute('width', spw);
+            sp.setAttribute('height', 2);
+            sp.setAttribute('fill', 'var(--text-primary)');
+            barG.appendChild(sp);
+          }
+          
+          // Draw text label below the summary bracket
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('x', startX + 2);
+          label.setAttribute('y', sy + 18);
+          label.setAttribute('fill', 'var(--text-secondary)');
+          label.setAttribute('font-size', '10px');
+          label.setAttribute('font-weight', '600');
+          label.textContent = task.name;
+          barG.appendChild(label);
+          
+        } else {
+          // Draw STANDARD TASK BAR (Capsule pills)
+          const rx = y + (config.rowHeight - config.taskBarHeight) / 2;
+          
+          // Background capsule shape
+          const barBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          barBg.setAttribute('x', startX);
+          barBg.setAttribute('y', rx);
+          barBg.setAttribute('width', width);
+          barBg.setAttribute('height', config.taskBarHeight);
+          barBg.setAttribute('rx', '5');
+          barBg.setAttribute('ry', '5');
+          barBg.setAttribute('fill', 'var(--task-normal-bg)');
+          barBg.setAttribute('stroke', 'var(--task-normal-border)');
+          barBg.setAttribute('stroke-width', '1');
+          barBg.setAttribute('class', 'task-bar-rect');
+          barG.appendChild(barBg);
+          
+          // Progress bar fill pill
+          if (task.progress > 0) {
+            const progressWidth = Math.round(width * (task.progress / 100));
+            const barProgress = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            barProgress.setAttribute('x', startX);
+            barProgress.setAttribute('y', rx + 1);
+            barProgress.setAttribute('width', Math.max(0, progressWidth - 2));
+            barProgress.setAttribute('height', config.taskBarHeight - 2);
+            barProgress.setAttribute('rx', '4');
+            barProgress.setAttribute('ry', '4');
+            
+            // Neon gradient apply
+            barProgress.setAttribute('fill', 'url(#grad-task-light)');
+            barG.appendChild(barProgress);
+          }
+          
+          // Render resource avatars floating next to the bar
+          if (task.resources.length > 0) {
+            let badgeX = finishX + 6;
+            task.resources.forEach(res => {
+              const badgeG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+              
+              // Circle
+              const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+              circ.setAttribute('cx', badgeX + 10);
+              circ.setAttribute('cy', rx + config.taskBarHeight / 2);
+              circ.setAttribute('r', '8');
+              circ.setAttribute('fill', getResourceColor(res));
+              circ.setAttribute('stroke', 'var(--bg-secondary)');
+              circ.setAttribute('stroke-width', '1');
+              badgeG.appendChild(circ);
+              
+              // Initials
+              const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+              text.setAttribute('x', badgeX + 10);
+              text.setAttribute('y', rx + config.taskBarHeight / 2 + 3);
+              text.setAttribute('text-anchor', 'middle');
+              text.setAttribute('fill', '#ffffff');
+              text.setAttribute('font-size', '7px');
+              text.setAttribute('font-weight', '700');
+              text.textContent = getInitials(res);
+              badgeG.appendChild(text);
+              
+              // Tooltip helper
+              const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+              titleEl.textContent = res;
+              badgeG.appendChild(titleEl);
+              
+              barG.appendChild(badgeG);
+              badgeX += 14; // spacing
+            });
+          }
+        }
+        
+        tasksGroup.appendChild(barG);
+      });
+      
+      // Draw predecessor connecting lines
+      drawPredecessorArrows(visibleTasksCoords);
+
+      // Draw Today Line (July 4, 2026 is project middle day!)
+      drawTodayLine(minDate, pxPerDay, timelineHeight);
+    }
+
+    // DRAWING GRID LINES AND HEADERS
+    function drawTimelineHeaderAndGrid(minDate, maxDate, pxPerDay, timelineHeight) {
+      const gridLinesGroup = document.getElementById('svg-grid-lines');
+      const gridHeadersGroup = document.getElementById('svg-grid-headers');
+      
+      const totalDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
+      
+      // Draw grid container base boundaries
+      const headerBorder = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      headerBorder.setAttribute('x1', '0');
+      headerBorder.setAttribute('y1', config.headerHeight);
+      headerBorder.setAttribute('x2', totalDays * pxPerDay);
+      headerBorder.setAttribute('y2', config.headerHeight);
+      headerBorder.setAttribute('stroke', 'var(--border-color)');
+      headerBorder.setAttribute('stroke-width', '1.5');
+      gridHeadersGroup.appendChild(headerBorder);
+
+      // Month definitions in Spanish
+      const monthNames = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+      ];
+      
+      // Draw column labels & lines depending on Zoom Scale
+      let currentDate = new Date(minDate);
+      const totalWidth = totalDays * pxPerDay;
+      
+      if (zoomLevel === 'day' || zoomLevel === 'fit') {
+        // Calculate dynamic day grouping interval to avoid overlapping texts
+        let dayInterval = 1;
+        if (pxPerDay < 5) {
+          dayInterval = 14;
+        } else if (pxPerDay < 10) {
+          dayInterval = 7;
+        } else if (pxPerDay < 18) {
+          dayInterval = 5;
+        } else if (pxPerDay < 28) {
+          dayInterval = 2;
+        }
+        
+        let dayCount = 0;
+        // DAY VIEW & ZOOM TO FIT VIEW
+        while (currentDate <= maxDate) {
+          const x = Math.round((currentDate - minDate) / (1000 * 60 * 60 * 24) * pxPerDay);
+          const dayOfWeek = currentDate.getDay();
+          
+          // Weekend shading (Saturday = 6, Sunday = 0) - only if days are not too compressed
+          if (pxPerDay >= 16 && (dayOfWeek === 0 || dayOfWeek === 6)) {
+            const wknd = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            wknd.setAttribute('x', x);
+            wknd.setAttribute('y', '0');
+            wknd.setAttribute('width', pxPerDay);
+            wknd.setAttribute('height', timelineHeight);
+            wknd.setAttribute('fill', 'var(--weekend-bg)');
+            gridLinesGroup.appendChild(wknd);
+          }
+          
+          // Vertical divider line at interval boundaries
+          if (dayCount % dayInterval === 0) {
+            // Grid line in body SVG
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', x);
+            line.setAttribute('y1', '0');
+            line.setAttribute('x2', x);
+            line.setAttribute('y2', timelineHeight);
+            line.setAttribute('stroke', 'var(--grid-line-color)');
+            line.setAttribute('stroke-width', '0.5');
+            gridLinesGroup.appendChild(line);
+            
+            // Column separator tick in header SVG
+            const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            hLine.setAttribute('x1', x);
+            hLine.setAttribute('y1', '32');
+            hLine.setAttribute('x2', x);
+            hLine.setAttribute('y2', '64');
+            hLine.setAttribute('stroke', 'var(--border-color)');
+            hLine.setAttribute('stroke-width', '0.5');
+            gridHeadersGroup.appendChild(hLine);
+            
+            // Bottom Tier Day number label
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            const labelX = Math.min(x + (pxPerDay * dayInterval) / 2, totalWidth - 10);
+            text.setAttribute('x', labelX);
+            text.setAttribute('y', '50');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('fill', dayOfWeek === 0 || dayOfWeek === 6 ? 'var(--text-muted)' : 'var(--text-secondary)');
+            text.setAttribute('font-size', '9px');
+            text.setAttribute('font-weight', '500');
+            text.textContent = currentDate.getDate();
+            gridHeadersGroup.appendChild(text);
+          }
+          
+          // Month label boundary change indicator
+          if (currentDate.getDate() === 1 || x === 0) {
+            const monthText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            monthText.setAttribute('x', x + 6);
+            monthText.setAttribute('y', '20');
+            monthText.setAttribute('fill', 'var(--text-primary)');
+            monthText.setAttribute('font-size', '11px');
+            monthText.setAttribute('font-weight', '600');
+            monthText.textContent = `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+            gridHeadersGroup.appendChild(monthText);
+            
+            // Major Month separator line
+            const mLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            mLine.setAttribute('x1', x);
+            mLine.setAttribute('y1', '0');
+            mLine.setAttribute('x2', x);
+            mLine.setAttribute('y2', '32');
+            mLine.setAttribute('stroke', 'var(--border-color)');
+            mLine.setAttribute('stroke-width', '1');
+            gridHeadersGroup.appendChild(mLine);
+          }
+          
+          currentDate = addDays(currentDate, 1);
+          dayCount++;
+        }
+      } else if (zoomLevel === 'week') {
+        // WEEK VIEW
+        while (currentDate <= maxDate) {
+          const x = Math.round((currentDate - minDate) / (1000 * 60 * 60 * 24) * pxPerDay);
+          
+          // Vertical divider line in body SVG
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x);
+          line.setAttribute('y1', '0');
+          line.setAttribute('x2', x);
+          line.setAttribute('y2', timelineHeight);
+          line.setAttribute('stroke', 'var(--grid-line-color)');
+          line.setAttribute('stroke-width', '0.5');
+          gridLinesGroup.appendChild(line);
+          
+          // Column separator tick in header SVG
+          const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          hLine.setAttribute('x1', x);
+          hLine.setAttribute('y1', '32');
+          hLine.setAttribute('x2', x);
+          hLine.setAttribute('y2', '64');
+          hLine.setAttribute('stroke', 'var(--border-color)');
+          hLine.setAttribute('stroke-width', '0.5');
+          gridHeadersGroup.appendChild(hLine);
+          
+          // Week start date label indicator
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', x + 6);
+          text.setAttribute('y', '50');
+          text.setAttribute('fill', 'var(--text-secondary)');
+          text.setAttribute('font-size', '9px');
+          text.setAttribute('font-weight', '500');
+          text.textContent = `${currentDate.getDate()} ${monthNames[currentDate.getMonth()].slice(0,3)}`;
+          gridHeadersGroup.appendChild(text);
+          
+          // Month boundaries
+          if (currentDate.getDate() <= 7 || x === 0) {
+            const mText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            mText.setAttribute('x', x + 6);
+            mText.setAttribute('y', '20');
+            mText.setAttribute('fill', 'var(--text-primary)');
+            mText.setAttribute('font-size', '11px');
+            mText.setAttribute('font-weight', '600');
+            mText.textContent = `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+            gridHeadersGroup.appendChild(mText);
+            
+            const mLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            mLine.setAttribute('x1', x);
+            mLine.setAttribute('y1', '0');
+            mLine.setAttribute('x2', x);
+            mLine.setAttribute('y2', '32');
+            mLine.setAttribute('stroke', 'var(--border-color)');
+            mLine.setAttribute('stroke-width', '1');
+            gridHeadersGroup.appendChild(mLine);
+          }
+          
+          currentDate = addDays(currentDate, 7);
+        }
+      } else {
+        // MONTH VIEW
+        while (currentDate <= maxDate) {
+          const x = Math.round((currentDate - minDate) / (1000 * 60 * 60 * 24) * pxPerDay);
+          
+          // Vertical divider line in body SVG
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x);
+          line.setAttribute('y1', '0');
+          line.setAttribute('x2', x);
+          line.setAttribute('y2', timelineHeight);
+          line.setAttribute('stroke', 'var(--grid-line-color)');
+          line.setAttribute('stroke-width', '0.5');
+          gridLinesGroup.appendChild(line);
+          
+          // Column separator line in header SVG
+          const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          hLine.setAttribute('x1', x);
+          hLine.setAttribute('y1', '0');
+          hLine.setAttribute('x2', x);
+          hLine.setAttribute('y2', '64');
+          hLine.setAttribute('stroke', 'var(--border-color)');
+          hLine.setAttribute('stroke-width', '1');
+          gridHeadersGroup.appendChild(hLine);
+          
+          // Month Label text indicator
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', x + 10);
+          text.setAttribute('y', '36');
+          text.setAttribute('fill', 'var(--text-primary)');
+          text.setAttribute('font-size', '11px');
+          text.setAttribute('font-weight', '600');
+          text.textContent = `${monthNames[currentDate.getMonth()]} '${String(currentDate.getFullYear()).slice(-2)}`;
+          gridHeadersGroup.appendChild(text);
+          
+          // Iterate to first of next month
+          const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+          currentDate = nextMonth;
+        }
+      }
+    }
+
+    // DRAWING TODAY LINE INDICATOR
+    function drawTodayLine(minDate, pxPerDay, timelineHeight) {
+      const todayGroup = document.getElementById('svg-today-line');
+      const gridHeadersGroup = document.getElementById('svg-grid-headers');
+      
+      // Let's hardcode 'today's line to July 4, 2026 to fit the 2026 data perfectly
+      const todayDate = new Date(2026, 6, 4); // Month is 0-indexed (6 = July)
+      
+      if (todayDate >= minDate) {
+        const todayX = Math.round((todayDate - minDate) / (1000 * 60 * 60 * 24) * pxPerDay);
+        
+        // Vertical dashed line in body SVG (from 0 to timelineHeight)
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', todayX);
+        line.setAttribute('y1', '0');
+        line.setAttribute('x2', todayX);
+        line.setAttribute('y2', timelineHeight);
+        line.setAttribute('stroke', 'var(--today-line-color)');
+        line.setAttribute('stroke-width', '1.5');
+        line.setAttribute('stroke-dasharray', '4 4');
+        todayGroup.appendChild(line);
+        
+        // Today tag label badge and header line in header SVG
+        if (gridHeadersGroup) {
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', todayX - 20);
+          rect.setAttribute('y', '38');
+          rect.setAttribute('width', '40');
+          rect.setAttribute('height', '16');
+          rect.setAttribute('rx', '4');
+          rect.setAttribute('fill', 'var(--today-line-color)');
+          gridHeadersGroup.appendChild(rect);
+          
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('x', todayX);
+          label.setAttribute('y', '49');
+          label.setAttribute('text-anchor', 'middle');
+          label.setAttribute('fill', '#ffffff');
+          label.setAttribute('font-size', '8px');
+          label.setAttribute('font-weight', '700');
+          label.textContent = 'HOY';
+          gridHeadersGroup.appendChild(label);
+
+          const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          hLine.setAttribute('x1', todayX);
+          hLine.setAttribute('y1', '32');
+          hLine.setAttribute('x2', todayX);
+          hLine.setAttribute('y2', '64');
+          hLine.setAttribute('stroke', 'var(--today-line-color)');
+          hLine.setAttribute('stroke-width', '1.5');
+          hLine.setAttribute('stroke-dasharray', '3 3');
+          gridHeadersGroup.appendChild(hLine);
+        }
+      }
+    }
+
+    // DRAWING PREDECESSOR DEPENDENCY PATH ARROWS
+    function drawPredecessorArrows(visibleCoords) {
+      const predsGroup = document.getElementById('svg-predecessors');
+      
+      visibleTasks.forEach(task => {
+        if (!task.predecessors || task.predecessors.length === 0) return;
+        
+        const targetCoords = visibleCoords[task.id];
+        if (!targetCoords) return; // Successor is currently hidden
+        
+        task.predecessors.forEach(pred => {
+          const sourceCoords = visibleCoords[pred.id];
+          if (!sourceCoords) return; // Predecessor is currently hidden
+          
+          // FS relation is standard
+          // Arrow starts at predecessor finishX and goes to successor startX
+          const startX = sourceCoords.isMilestone ? sourceCoords.startX : sourceCoords.finishX;
+          const startY = sourceCoords.yCenter;
+          
+          const endX = targetCoords.startX;
+          const endY = targetCoords.yCenter;
+          
+          // Generate elbow coordinate points
+          const pathD = getConnectorPath(startX, startY, endX, endY);
+          
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', pathD);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', 'var(--arrow-color)');
+          path.setAttribute('stroke-width', '1.5');
+          path.setAttribute('marker-end', 'url(#arrow)');
+          path.setAttribute('class', `dep-link dep-from-${pred.id} dep-to-${task.id}`);
+          
+          predsGroup.appendChild(path);
+        });
+      });
+    }
+
+    // ELBOW CONNECTOR PATH GENERATOR (Right-angles)
+    function getConnectorPath(xFrom, yFrom, xTo, yTo) {
+      const pad = 12; // safety buffer for arrows
+      
+      if (xTo >= xFrom + pad) {
+        // Standard FS - finishes before successor starts
+        const xMid = xFrom + pad / 2;
+        return `M ${xFrom} ${yFrom} H ${xMid} V ${yTo} H ${xTo}`;
+      } else {
+        // Backward schedule overlap path
+        // Loops backward and returns
+        const yMid = yFrom + (yTo - yFrom) / 2;
+        return `M ${xFrom} ${yFrom} H ${xFrom + pad / 2} V ${yMid} H ${xTo - pad / 2} V ${yTo} H ${xTo}`;
+      }
+    }
+
+    // HOVER ACTIONS: HIGHLIGHT TASK INCOMING/OUTGOING CONNECTIONS
+    function highlightTaskDependencies(taskId, activate) {
+      const depLinks = document.querySelectorAll('.dep-link');
+      const tableRows = document.querySelectorAll('.table-row');
+      const taskBars = document.querySelectorAll('.task-bar-g');
+      
+      if (activate) {
+        // Highlight active connections
+        let relatedTaskIds = new Set([taskId]);
+        let activeLinksCount = 0;
+        
+        depLinks.forEach(link => {
+          const isOutgoing = link.classList.contains(`dep-from-${taskId}`);
+          const isIncoming = link.classList.contains(`dep-to-${taskId}`);
+          
+          if (isOutgoing || isIncoming) {
+            link.classList.add('active-highlight');
+            activeLinksCount++;
+            
+            // Extract the other task ID to highlight
+            link.classList.forEach(cls => {
+              if (cls.startsWith('dep-from-') || cls.startsWith('dep-to-')) {
+                relatedTaskIds.add(cls.split('-')[2]);
+              }
+            });
+          } else {
+            link.classList.add('faded');
+          }
+        });
+        
+        // Glow related table rows and task bars
+        if (activeLinksCount > 0) {
+          tableRows.forEach(row => {
+            const id = row.getAttribute('data-id');
+            if (relatedTaskIds.has(id)) {
+              row.classList.add('hovered');
+            }
+          });
+          
+          taskBars.forEach(bar => {
+            const id = bar.getAttribute('data-id');
+            if (relatedTaskIds.has(id)) {
+              bar.classList.add('active-highlight');
+            } else {
+              bar.classList.add('faded');
+            }
+          });
+        }
+      } else {
+        // Reset all classes
+        depLinks.forEach(link => link.classList.remove('active-highlight', 'faded'));
+        tableRows.forEach(row => row.classList.remove('hovered'));
+        taskBars.forEach(bar => bar.classList.remove('active-highlight', 'faded'));
+      }
+    }
+
+    // INTERACTIVE RICH TOOLTIP MANAGEMENT
+    function showTooltip(task, event) {
+      const tooltip = document.getElementById('gantt-tooltip');
+      
+      // Build formatted dates
+      const options = { year: 'numeric', month: 'short', day: 'numeric' };
+      const startStr = task.start.toLocaleDateString('es-ES', options);
+      const finishStr = task.finish.toLocaleDateString('es-ES', options);
+      
+      let html = `
+        <div class="tooltip-header">${task.name}</div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">ID:</span>
+          <span class="tooltip-value">${task.id}</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Inicio:</span>
+          <span class="tooltip-value">${startStr}</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Fin:</span>
+          <span class="tooltip-value">${finishStr}</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Duración:</span>
+          <span class="tooltip-value">${task.duration} días</span>
+        </div>
+        <div class="tooltip-item">
+          <span class="tooltip-label">Progreso:</span>
+          <span class="tooltip-value">${task.progress}%</span>
+        </div>
+      `;
+      
+      if (task.resources.length > 0) {
+        html += `
+          <div class="tooltip-item" style="margin-top: 6px;">
+            <span class="tooltip-label">Recursos:</span>
+            <span class="tooltip-value" style="color: var(--accent); font-weight:600;">${task.resources.join(', ')}</span>
+          </div>
+        `;
+      }
+      
+      if (task.notes) {
+        html += `<div class="tooltip-notes">${task.notes}</div>`;
+      }
+      
+      tooltip.innerHTML = html;
+      tooltip.classList.add('visible');
+      
+      // Position tooltip near the cursor
+      positionTooltip(event);
+    }
+
+    function positionTooltip(event) {
+      const tooltip = document.getElementById('gantt-tooltip');
+      const pad = 15;
+      
+      let x = event.clientX + pad;
+      let y = event.clientY + pad;
+      
+      // Guard against view boundaries overflow
+      const tooltipWidth = tooltip.offsetWidth;
+      const tooltipHeight = tooltip.offsetHeight;
+      
+      if (x + tooltipWidth > window.innerWidth) {
+        x = event.clientX - tooltipWidth - pad;
+      }
+      
+      if (y + tooltipHeight > window.innerHeight) {
+        y = event.clientY - tooltipHeight - pad;
+      }
+      
+      tooltip.style.left = `${x}px`;
+      tooltip.style.top = `${y}px`;
+    }
+
+    function hideTooltip() {
+      const tooltip = document.getElementById('gantt-tooltip');
+      tooltip.classList.remove('visible');
+    }
+
+    // EXPORT TIMELINE TO SVG FILE
+    function exportToSVG() {
+      const headerSvg = document.getElementById('gantt-header-svg');
+      const bodySvg = document.getElementById('gantt-svg');
+      
+      if (!headerSvg || !bodySvg) return;
+      
+      // Create a combined SVG element
+      const combinedSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const width = bodySvg.getAttribute('width');
+      const headerHeight = parseInt(headerSvg.getAttribute('height')) || 64;
+      const bodyHeight = parseInt(bodySvg.getAttribute('height')) || 0;
+      
+      combinedSvg.setAttribute('width', width);
+      combinedSvg.setAttribute('height', String(headerHeight + bodyHeight));
+      
+      // Clone and insert defs from bodySvg
+      const defs = bodySvg.querySelector('defs');
+      if (defs) {
+        combinedSvg.appendChild(defs.cloneNode(true));
+      }
+      
+      // Clone header group and append to combined SVG
+      const headerGroup = headerSvg.querySelector('#svg-grid-headers');
+      if (headerGroup) {
+        combinedSvg.appendChild(headerGroup.cloneNode(true));
+      }
+      
+      // Clone body groups and translate them down by headerHeight
+      const bodyGroupKeys = ['#svg-grid-lines', '#svg-predecessors', '#svg-tasks', '#svg-today-line'];
+      bodyGroupKeys.forEach(key => {
+        const group = bodySvg.querySelector(key);
+        if (group) {
+          const clone = group.cloneNode(true);
+          clone.setAttribute('transform', `translate(0, ${headerHeight})`);
+          combinedSvg.appendChild(clone);
+        }
+      });
+      
+      // Apply page styling variables inline into the SVG elements to make it fully self-contained!
+      const computedStyles = window.getComputedStyle(document.body);
+      const styleContent = `
+        svg {
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          background-color: ${computedStyles.getPropertyValue('--bg-primary')};
+        }
+        text {
+          fill: ${computedStyles.getPropertyValue('--text-primary')};
+        }
+        line {
+          stroke: ${computedStyles.getPropertyValue('--grid-line-color')};
+        }
+        .dep-link {
+          stroke: ${computedStyles.getPropertyValue('--arrow-color')};
+          stroke-width: 1.5px;
+          opacity: 0.8;
+        }
+        .task-bar-rect {
+          stroke: ${computedStyles.getPropertyValue('--task-normal-border')};
+        }
+      `;
+      
+      const styleNode = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      styleNode.textContent = styleContent;
+      combinedSvg.insertBefore(styleNode, combinedSvg.firstChild);
+
+      // Serialize XML to string
+      const serializer = new XMLSerializer();
+      let source = serializer.serializeToString(combinedSvg);
+      
+      // Add namespaces only if they are missing
+      if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
+        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
+      if (!source.includes('xmlns:xlink="http://www.w3.org/1999/xlink"')) {
+        source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+      }
+
+      // Add xml declaration
+      source = '<?xml version="1.0" standalone="no"?>\r\n' + source;
+      
+      // Create download link
+      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(source);
+      
+      const downloadLink = document.createElement("a");
+      downloadLink.href = url;
+      downloadLink.download = "Gantt_Chart_Export.svg";
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+
+    // EXPORT INTERACTIVE INTERFACE TO PORTABLE HTML FILE
+    async function exportToHTML() {
+      let htmlContent = '';
+      try {
+        const response = await fetch(window.location.href);
+        if (response.ok) {
+          htmlContent = await response.text();
+        }
+      } catch (e) {
+        console.warn("Local fetch failed (likely file:// CORS security). Falling back to outerHTML serialization.");
+      }
+      
+      if (!htmlContent) {
+        // Fallback to outerHTML serialization
+        htmlContent = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      }
+      
+      // Escape backticks and dollar signs in the loaded CSV text
+      const escapedCSV = currentCSVData.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+      
+      // Replace the defaultCSVData in the script block
+      const regex = /const\s+defaultCSVData\s*=\s*`[\s\S]*?`;/;
+      const replacement = `const defaultCSVData = \`${escapedCSV}\`;`;
+      htmlContent = htmlContent.replace(regex, replacement);
+      
+      // Create download link
+      const url = "data:text/html;charset=utf-8," + encodeURIComponent(htmlContent);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = url;
+      downloadLink.download = "Gantt_Chart_Interactive.html";
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+
+    // DATE ARITHMETIC UTILITIES
+    function addDays(date, days) {
+      const result = new Date(date);
+      result.setDate(result.getDate() + days);
+      return result;
+    }
+
+    function getStartOfUnit(date, unit) {
+      const result = new Date(date);
+      if (unit === 'day') {
+        // Start of week (Monday)
+        const day = result.getDay();
+        const diff = result.getDate() - day + (day === 0 ? -6 : 1);
+        return new Date(result.setDate(diff));
+      } else if (unit === 'week') {
+        // Aligned to Monday
+        const day = result.getDay();
+        const diff = result.getDate() - day + (day === 0 ? -6 : 1);
+        return new Date(result.setDate(diff));
+      } else {
+        // Start of month
+        return new Date(result.getFullYear(), result.getMonth(), 1);
+      }
+    }
+
+    function getEndOfUnit(date, unit) {
+      const result = new Date(date);
+      if (unit === 'day') {
+        // End of week (Sunday)
+        const day = result.getDay();
+        const diff = result.getDate() + (day === 0 ? 0 : 7 - day);
+        return new Date(result.setDate(diff));
+      } else if (unit === 'week') {
+        // Aligned to Sunday
+        const day = result.getDay();
+        const diff = result.getDate() + (day === 0 ? 0 : 7 - day);
+        return new Date(result.setDate(diff));
+      } else {
+        // End of month
+        return new Date(result.getFullYear(), result.getMonth() + 1, 0);
+      }
+    }
+  </script>
+
+
+</body></html>
